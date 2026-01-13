@@ -1,0 +1,654 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { adminAPI, AdminTeacher, AdminDepartment } from '@/services/api'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  ArrowLeft,
+  Building2,
+  Users,
+  GraduationCap,
+  BookOpen,
+  Plus,
+  Trash2,
+  Upload,
+  Shield,
+  ShieldCheck,
+  FileSpreadsheet,
+  X,
+  Loader2,
+  Search,
+} from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { AppLogo } from '@/components/ui/AppLogo'
+import toast from 'react-hot-toast'
+
+export default function AdminPage() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'departments'>('overview')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Modal states
+  const [showAddTeacherModal, setShowAddTeacherModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showAddDeptModal, setShowAddDeptModal] = useState(false)
+
+  // Form states
+  const [teacherForm, setTeacherForm] = useState({
+    email: '',
+    name: '',
+    designation: 'Professor',
+    department_id: 0,
+    make_admin: false,
+  })
+  const [deptForm, setDeptForm] = useState({ department_name: '', school: '' })
+  const [importFile, setImportFile] = useState<File | null>(null)
+
+  // Queries
+  const { data: dashboard, isLoading: isLoadingDashboard } = useQuery({
+    queryKey: ['adminDashboard'],
+    queryFn: adminAPI.getDashboard,
+  })
+
+  const { data: teachersData, isLoading: isLoadingTeachers } = useQuery({
+    queryKey: ['adminTeachers'],
+    queryFn: adminAPI.getTeachers,
+    enabled: activeTab === 'teachers' || activeTab === 'overview',
+  })
+
+  const { data: departmentsData, isLoading: isLoadingDepts } = useQuery({
+    queryKey: ['adminDepartments'],
+    queryFn: adminAPI.getDepartments,
+    enabled: activeTab === 'departments' || activeTab === 'overview',
+  })
+
+  // Mutations
+  const addTeacherMutation = useMutation({
+    mutationFn: adminAPI.addTeacher,
+    onSuccess: () => {
+      toast.success('Teacher added successfully')
+      queryClient.invalidateQueries({ queryKey: ['adminTeachers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+      setShowAddTeacherModal(false)
+      setTeacherForm({ email: '', name: '', designation: 'Professor', department_id: 0, make_admin: false })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to add teacher')
+    },
+  })
+
+  const deleteTeacherMutation = useMutation({
+    mutationFn: adminAPI.deleteTeacher,
+    onSuccess: () => {
+      toast.success('Teacher removed')
+      queryClient.invalidateQueries({ queryKey: ['adminTeachers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to remove teacher')
+    },
+  })
+
+  const importTeachersMutation = useMutation({
+    mutationFn: adminAPI.importTeachers,
+    onSuccess: (data) => {
+      toast.success(data.message)
+      queryClient.invalidateQueries({ queryKey: ['adminTeachers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+      setShowImportModal(false)
+      setImportFile(null)
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to import teachers')
+    },
+  })
+
+  const addDeptMutation = useMutation({
+    mutationFn: adminAPI.addDepartment,
+    onSuccess: () => {
+      toast.success('Department created')
+      queryClient.invalidateQueries({ queryKey: ['adminDepartments'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+      setShowAddDeptModal(false)
+      setDeptForm({ department_name: '', school: '' })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to create department')
+    },
+  })
+
+  const deleteDeptMutation = useMutation({
+    mutationFn: adminAPI.deleteDepartment,
+    onSuccess: () => {
+      toast.success('Department deleted')
+      queryClient.invalidateQueries({ queryKey: ['adminDepartments'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to delete department')
+    },
+  })
+
+  const toggleAdminMutation = useMutation({
+    mutationFn: adminAPI.toggleAdmin,
+    onSuccess: (data) => {
+      toast.success(data.message)
+      queryClient.invalidateQueries({ queryKey: ['adminTeachers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to toggle admin status')
+    },
+  })
+
+  // Filtered teachers
+  const filteredTeachers = (teachersData?.teachers || []).filter((t: AdminTeacher) =>
+    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.department_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  if (isLoadingDashboard) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-background bg-gradient-mesh">
+      {/* Header */}
+      <header className="sticky top-0 z-50 glass border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate('/teacher')}
+                className="rounded-xl"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <AppLogo size="md" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                <Shield className="h-3 w-3 mr-1" />
+                Admin
+              </Badge>
+              <ThemeToggle />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Organization Header */}
+      <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-white/20 backdrop-blur">
+              <Building2 className="h-8 w-8" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-heading font-bold">{dashboard?.organization.name}</h1>
+              <p className="text-white/80">{dashboard?.organization.code}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b bg-card">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex">
+            <button
+              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'overview' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('overview')}
+            >
+              <Building2 className="h-4 w-4" />
+              Overview
+            </button>
+            <button
+              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'teachers' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('teachers')}
+            >
+              <Users className="h-4 w-4" />
+              Teachers
+              <Badge variant="secondary" className="text-xs">{dashboard?.stats.teachers || 0}</Badge>
+            </button>
+            <button
+              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'departments' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('departments')}
+            >
+              <BookOpen className="h-4 w-4" />
+              Departments
+              <Badge variant="secondary" className="text-xs">{dashboard?.stats.departments || 0}</Badge>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-card rounded-2xl border p-4 sm:p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-xl bg-violet-100 dark:bg-violet-900/30">
+                    <Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                  </div>
+                </div>
+                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.teachers}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Teachers</p>
+              </div>
+              <div className="bg-card rounded-2xl border p-4 sm:p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                    <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                </div>
+                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.departments}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Departments</p>
+              </div>
+              <div className="bg-card rounded-2xl border p-4 sm:p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/30">
+                    <GraduationCap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                </div>
+                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.active_classes}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Active Classes</p>
+              </div>
+              <div className="bg-card rounded-2xl border p-4 sm:p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30">
+                    <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                </div>
+                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.students}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Students</p>
+              </div>
+            </div>
+
+            {/* Admins List */}
+            <div className="bg-card rounded-2xl border p-6">
+              <h3 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-amber-500" />
+                Organization Admins
+              </h3>
+              <div className="space-y-2">
+                {dashboard?.admins.map((admin) => (
+                  <div
+                    key={admin.email}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-semibold">
+                      {admin.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{admin.name}</p>
+                      <p className="text-sm text-muted-foreground">{admin.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Teachers Tab */}
+        {activeTab === 'teachers' && (
+          <div className="space-y-4">
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search teachers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowImportModal(true)} className="rounded-xl">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+                <Button onClick={() => setShowAddTeacherModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Teacher
+                </Button>
+              </div>
+            </div>
+
+            {/* Teachers List */}
+            {isLoadingTeachers ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+              </div>
+            ) : filteredTeachers.length === 0 ? (
+              <div className="text-center py-12 bg-card rounded-2xl border">
+                <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="font-medium text-foreground mb-2">No teachers found</h3>
+                <p className="text-sm text-muted-foreground">Add teachers to your organization</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {filteredTeachers.map((teacher: AdminTeacher) => (
+                  <div
+                    key={teacher.email}
+                    className="flex items-center justify-between p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                        {teacher.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-foreground">{teacher.name}</p>
+                          {teacher.is_admin && (
+                            <Badge className="bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs">
+                              <Shield className="h-2.5 w-2.5 mr-1" />
+                              Admin
+                            </Badge>
+                          )}
+                          {teacher.verified && (
+                            <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-xs">
+                              Verified
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{teacher.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {teacher.designation} • {teacher.department_name || 'No department'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleAdminMutation.mutate(teacher.email)}
+                        disabled={toggleAdminMutation.isPending}
+                        className="rounded-lg text-xs"
+                      >
+                        {teacher.is_admin ? 'Remove Admin' : 'Make Admin'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          if (confirm(`Remove ${teacher.name} from the organization?`)) {
+                            deleteTeacherMutation.mutate(teacher.email)
+                          }
+                        }}
+                        disabled={deleteTeacherMutation.isPending}
+                        className="rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Departments Tab */}
+        {activeTab === 'departments' && (
+          <div className="space-y-4">
+            {/* Actions */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-heading font-semibold text-foreground">Manage Departments</h2>
+              <Button onClick={() => setShowAddDeptModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Department
+              </Button>
+            </div>
+
+            {/* Departments List */}
+            {isLoadingDepts ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+              </div>
+            ) : (departmentsData?.departments || []).length === 0 ? (
+              <div className="text-center py-12 bg-card rounded-2xl border">
+                <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="font-medium text-foreground mb-2">No departments</h3>
+                <p className="text-sm text-muted-foreground">Create departments to organize teachers</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {(departmentsData?.departments || []).map((dept: AdminDepartment) => (
+                  <div
+                    key={dept.department_id}
+                    className="flex items-center justify-between p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
+                  >
+                    <div>
+                      <p className="font-semibold text-foreground">{dept.department_name}</p>
+                      {dept.school && <p className="text-sm text-muted-foreground">{dept.school}</p>}
+                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {dept.teacher_count} teachers
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <GraduationCap className="h-3 w-3" />
+                          {dept.class_count} classes
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (confirm(`Delete ${dept.department_name}?`)) {
+                          deleteDeptMutation.mutate(dept.department_id)
+                        }
+                      }}
+                      disabled={deleteDeptMutation.isPending || dept.teacher_count > 0 || dept.class_count > 0}
+                      className="rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Add Teacher Modal */}
+      {showAddTeacherModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-card z-10">
+              <h3 className="font-heading font-bold text-lg text-foreground">Add Teacher</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowAddTeacherModal(false)} className="rounded-xl">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+                <input
+                  type="email"
+                  value={teacherForm.email}
+                  onChange={(e) => setTeacherForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="teacher@example.com"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Name</label>
+                <input
+                  type="text"
+                  value={teacherForm.name}
+                  onChange={(e) => setTeacherForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Dr. John Doe"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Designation</label>
+                <input
+                  type="text"
+                  value={teacherForm.designation}
+                  onChange={(e) => setTeacherForm(prev => ({ ...prev, designation: e.target.value }))}
+                  placeholder="Professor"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Department</label>
+                <select
+                  value={teacherForm.department_id}
+                  onChange={(e) => setTeacherForm(prev => ({ ...prev, department_id: Number(e.target.value) }))}
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                >
+                  <option value={0}>Select department</option>
+                  {(departmentsData?.departments || []).map((dept: AdminDepartment) => (
+                    <option key={dept.department_id} value={dept.department_id}>
+                      {dept.department_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="make-admin"
+                  checked={teacherForm.make_admin}
+                  onChange={(e) => setTeacherForm(prev => ({ ...prev, make_admin: e.target.checked }))}
+                  className="w-4 h-4 rounded border-slate-300"
+                />
+                <label htmlFor="make-admin" className="text-sm text-foreground">
+                  Make this teacher an admin
+                </label>
+              </div>
+              <Button
+                onClick={() => addTeacherMutation.mutate(teacherForm)}
+                disabled={!teacherForm.email || !teacherForm.name || !teacherForm.department_id || addTeacherMutation.isPending}
+                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11"
+              >
+                {addTeacherMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</>
+                ) : (
+                  <><Plus className="h-4 w-4 mr-2" />Add Teacher</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="font-heading font-bold text-lg text-foreground">Import Teachers</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowImportModal(false)} className="rounded-xl">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="border-2 border-dashed rounded-xl p-8 text-center">
+                <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="import-file"
+                />
+                <label htmlFor="import-file" className="cursor-pointer">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {importFile ? importFile.name : 'Click to select CSV or Excel file'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Columns: email, name, designation, department
+                  </p>
+                </label>
+              </div>
+              <Button
+                onClick={() => importFile && importTeachersMutation.mutate(importFile)}
+                disabled={!importFile || importTeachersMutation.isPending}
+                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11"
+              >
+                {importTeachersMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</>
+                ) : (
+                  <><Upload className="h-4 w-4 mr-2" />Import Teachers</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Department Modal */}
+      {showAddDeptModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="font-heading font-bold text-lg text-foreground">Add Department</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowAddDeptModal(false)} className="rounded-xl">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Department Name</label>
+                <input
+                  type="text"
+                  value={deptForm.department_name}
+                  onChange={(e) => setDeptForm(prev => ({ ...prev, department_name: e.target.value }))}
+                  placeholder="e.g., Computer Science"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">School (Optional)</label>
+                <input
+                  type="text"
+                  value={deptForm.school}
+                  onChange={(e) => setDeptForm(prev => ({ ...prev, school: e.target.value }))}
+                  placeholder="e.g., School of Engineering"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <Button
+                onClick={() => addDeptMutation.mutate(deptForm)}
+                disabled={!deptForm.department_name || addDeptMutation.isPending}
+                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11"
+              >
+                {addDeptMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating...</>
+                ) : (
+                  <><Plus className="h-4 w-4 mr-2" />Create Department</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
