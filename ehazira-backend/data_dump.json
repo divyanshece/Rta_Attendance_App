@@ -1,0 +1,921 @@
+[
+{
+  "model": "core.organization",
+  "pk": 1,
+  "fields": {
+    "name": "Guru Ghasidas Vishwavidyalaya",
+    "code": "GGU",
+    "address": "Bilaspur, Chhattisgarh",
+    "created_at": "2025-12-25T13:23:44.943Z"
+  }
+},
+{
+  "model": "core.organizationadmin",
+  "pk": 1,
+  "fields": {
+    "organization": 1,
+    "teacher": "divyanshece242@gmail.com",
+    "added_at": "2025-12-28T18:34:40.235Z",
+    "added_by": null
+  }
+},
+{
+  "model": "core.organizationadmin",
+  "pk": 2,
+  "fields": {
+    "organization": 1,
+    "teacher": "divyanshsingh1466@gmail.com",
+    "added_at": "2025-12-28T18:57:12.111Z",
+    "added_by": "divyanshece242@gmail.com"
+  }
+},
+{
+  "model": "core.department",
+  "pk": 2,
+  "fields": {
+    "organization": 1,
+    "department_name": "Computer Science",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 3,
+  "fields": {
+    "organization": 1,
+    "department_name": "Computer Science & Engineering",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 4,
+  "fields": {
+    "organization": 1,
+    "department_name": "Information Technology",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 5,
+  "fields": {
+    "organization": 1,
+    "department_name": "Electronics and Communication Engineering",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 6,
+  "fields": {
+    "organization": 1,
+    "department_name": "Electrical Engineering",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 7,
+  "fields": {
+    "organization": 1,
+    "department_name": "Mechanical Engineering",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 8,
+  "fields": {
+    "organization": 1,
+    "department_name": "Civil Engineering",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 9,
+  "fields": {
+    "organization": 1,
+    "department_name": "Mathematics",
+    "school": ""
+  }
+},
+{
+  "model": "core.department",
+  "pk": 11,
+  "fields": {
+    "organization": 1,
+    "department_name": "Chemistry",
+    "school": ""
+  }
+},
+{
+  "model": "core.teacher",
+  "pk": "divyanshece242@gmail.com",
+  "fields": {
+    "name": "Deepak Neetam",
+    "designation": "Assistant Professor",
+    "organization": 1,
+    "department": 4,
+    "verified": true
+  }
+},
+{
+  "model": "core.teacher",
+  "pk": "divyanshsingh1466@gmail.com",
+  "fields": {
+    "name": "Test Teacher",
+    "designation": "Professor",
+    "organization": 1,
+    "department": 8,
+    "verified": true
+  }
+},
+{
+  "model": "core.teacher",
+  "pk": "rsirvastav593@gmail.com",
+  "fields": {
+    "name": "Nikita Kashyap",
+    "designation": "Associate Professor",
+    "organization": 1,
+    "department": 5,
+    "verified": true
+  }
+},
+{
+  "model": "core.class",
+  "pk": 14,
+  "fields": {
+    "department": 4,
+    "batch": 2025,
+    "semester": 6,
+    "section": "A",
+    "created_by": "divyanshece242@gmail.com",
+    "created_at": "2025-12-28T17:24:01.958Z",
+    "coordinator": "divyanshece242@gmail.com",
+    "is_active": true,
+    "completed_at": null,
+    "completed_by": null
+  }
+},
+{
+  "model": "core.class",
+  "pk": 15,
+  "fields": {
+    "department": 11,
+    "batch": 2026,
+    "semester": 7,
+    "section": "B",
+    "created_by": "divyanshece242@gmail.com",
+    "created_at": "2025-12-28T17:24:29.859Z",
+    "coordinator": "divyanshece242@gmail.com",
+    "is_active": true,
+    "completed_at": null,
+    "completed_by": null
+  }
+},
+{
+  "model": "core.class",
+  "pk": 16,
+  "fields": {
+    "department": 3,
+    "batch": 2026,
+    "semester": 6,
+    "section": "B",
+    "created_by": "divyanshsingh1466@gmail.com",
+    "created_at": "2025-12-28T19:03:54.881Z",
+    "coordinator": "divyanshsingh1466@gmail.com",
+    "is_active": true,
+    "completed_at": null,
+    "completed_by": null
+  }
+},
+{
+  "model": "core.class",
+  "pk": 18,
+  "fields": {
+    "department": 11,
+    "batch": 2026,
+    "semester": 8,
+    "section": "A",
+    "created_by": "divyanshece242@gmail.com",
+    "created_at": "2026-02-04T05:43:28.640Z",
+    "coordinator": "divyanshece242@gmail.com",
+    "is_active": true,
+    "completed_at": null,
+    "completed_by": null
+  }
+},
+{
+  "model": "core.class",
+  "pk": 19,
+  "fields": {
+    "department": 6,
+    "batch": 2026,
+    "semester": 1,
+    "section": "B",
+    "created_by": "divyanshece242@gmail.com",
+    "created_at": "2026-02-05T09:58:38.914Z",
+    "coordinator": "divyanshece242@gmail.com",
+    "is_active": true,
+    "completed_at": null,
+    "completed_by": null
+  }
+},
+{
+  "model": "core.classteacher",
+  "pk": 6,
+  "fields": {
+    "class_obj": 16,
+    "teacher": "rsirvastav593@gmail.com",
+    "added_by": "divyanshsingh1466@gmail.com",
+    "added_at": "2025-12-28T19:26:14.308Z"
+  }
+},
+{
+  "model": "core.student",
+  "pk": "divyanshcom685@gmail.com",
+  "fields": {
+    "name": "Divyansh Pandey",
+    "roll_no": "22030102",
+    "class_field": 16,
+    "verified": true
+  }
+},
+{
+  "model": "core.course",
+  "pk": 1,
+  "fields": {
+    "course_name": "Data Structures"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 2,
+  "fields": {
+    "course_name": "Testing Subject"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 3,
+  "fields": {
+    "course_name": "Test Subject"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 4,
+  "fields": {
+    "course_name": "New sub"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 5,
+  "fields": {
+    "course_name": "mech Subject"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 6,
+  "fields": {
+    "course_name": "Thermodynamics"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 7,
+  "fields": {
+    "course_name": "DSA"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 8,
+  "fields": {
+    "course_name": "DA"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 9,
+  "fields": {
+    "course_name": "Add"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 10,
+  "fields": {
+    "course_name": "jh"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 11,
+  "fields": {
+    "course_name": "AS"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 12,
+  "fields": {
+    "course_name": "dh"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 13,
+  "fields": {
+    "course_name": "hj"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 14,
+  "fields": {
+    "course_name": "Data Communication"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 15,
+  "fields": {
+    "course_name": "Eg"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 16,
+  "fields": {
+    "course_name": "EG"
+  }
+},
+{
+  "model": "core.course",
+  "pk": 17,
+  "fields": {
+    "course_name": "Machine Learning"
+  }
+},
+{
+  "model": "core.subject",
+  "pk": 18,
+  "fields": {
+    "course": 7,
+    "class_field": 16,
+    "teacher": "divyanshsingh1466@gmail.com"
+  }
+},
+{
+  "model": "core.subject",
+  "pk": 19,
+  "fields": {
+    "course": 8,
+    "class_field": 16,
+    "teacher": "divyanshsingh1466@gmail.com"
+  }
+},
+{
+  "model": "core.subject",
+  "pk": 20,
+  "fields": {
+    "course": 16,
+    "class_field": 16,
+    "teacher": "rsirvastav593@gmail.com"
+  }
+},
+{
+  "model": "core.subject",
+  "pk": 21,
+  "fields": {
+    "course": 17,
+    "class_field": 14,
+    "teacher": "divyanshece242@gmail.com"
+  }
+},
+{
+  "model": "core.period",
+  "pk": 72,
+  "fields": {
+    "subject": 18,
+    "day_of_week": 0,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 76,
+  "fields": {
+    "subject": 18,
+    "day_of_week": 2,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 78,
+  "fields": {
+    "subject": 18,
+    "day_of_week": 3,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 79,
+  "fields": {
+    "subject": 18,
+    "day_of_week": 3,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 80,
+  "fields": {
+    "subject": 18,
+    "day_of_week": 4,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 84,
+  "fields": {
+    "subject": 20,
+    "day_of_week": 6,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 85,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 0,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 86,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 0,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 87,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 0,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 88,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 1,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 89,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 1,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 90,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 1,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 91,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 2,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 92,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 2,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 93,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 2,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 94,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 3,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 95,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 3,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 96,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 3,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 97,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 4,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 98,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 4,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 99,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 4,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 100,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 5,
+    "period_no": 1,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 101,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 5,
+    "period_no": 2,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.period",
+  "pk": 102,
+  "fields": {
+    "subject": 21,
+    "day_of_week": 5,
+    "period_no": 7,
+    "start_time": null,
+    "end_time": null
+  }
+},
+{
+  "model": "core.session",
+  "pk": 17,
+  "fields": {
+    "period": 84,
+    "date": "2025-12-28",
+    "otp": "AVFU",
+    "otp_generated_at": "2025-12-28T19:45:58.988Z",
+    "is_active": false,
+    "closed_at": "2025-12-28T19:46:16.562Z",
+    "class_mode": "offline",
+    "teacher_latitude": null,
+    "teacher_longitude": null,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.session",
+  "pk": 18,
+  "fields": {
+    "period": 84,
+    "date": "2025-12-28",
+    "otp": "WS6C",
+    "otp_generated_at": "2025-12-28T19:46:52.283Z",
+    "is_active": false,
+    "closed_at": "2025-12-28T19:47:07.571Z",
+    "class_mode": "offline",
+    "teacher_latitude": null,
+    "teacher_longitude": null,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.session",
+  "pk": 19,
+  "fields": {
+    "period": 84,
+    "date": "2025-12-28",
+    "otp": "9L6N",
+    "otp_generated_at": "2025-12-28T19:54:34.699Z",
+    "is_active": false,
+    "closed_at": "2025-12-28T19:54:46.600Z",
+    "class_mode": "offline",
+    "teacher_latitude": null,
+    "teacher_longitude": null,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.session",
+  "pk": 20,
+  "fields": {
+    "period": 94,
+    "date": "2026-02-05",
+    "otp": "R8SK",
+    "otp_generated_at": "2026-02-05T17:58:36.868Z",
+    "is_active": false,
+    "closed_at": "2026-02-05T17:59:05.060Z",
+    "class_mode": "offline",
+    "teacher_latitude": 17.6004865,
+    "teacher_longitude": 78.1260354,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.session",
+  "pk": 21,
+  "fields": {
+    "period": 94,
+    "date": "2026-02-05",
+    "otp": "3PKF",
+    "otp_generated_at": "2026-02-05T17:59:10.412Z",
+    "is_active": false,
+    "closed_at": "2026-02-05T17:59:15.870Z",
+    "class_mode": "offline",
+    "teacher_latitude": 17.6004477,
+    "teacher_longitude": 78.1259662,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.session",
+  "pk": 22,
+  "fields": {
+    "period": 94,
+    "date": "2026-02-05",
+    "otp": "63NB",
+    "otp_generated_at": "2026-02-05T17:59:26.775Z",
+    "is_active": false,
+    "closed_at": "2026-02-05T17:59:41.063Z",
+    "class_mode": "offline",
+    "teacher_latitude": 17.6005529,
+    "teacher_longitude": 78.1261622,
+    "proximity_radius": 30
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 29,
+  "fields": {
+    "session": 17,
+    "student": "divyanshcom685@gmail.com",
+    "status": "A",
+    "submitted_at": "2025-12-28T19:45:34.129Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 30,
+  "fields": {
+    "session": 18,
+    "student": "divyanshcom685@gmail.com",
+    "status": "A",
+    "submitted_at": "2025-12-28T19:46:36.813Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 31,
+  "fields": {
+    "session": 19,
+    "student": "divyanshcom685@gmail.com",
+    "status": "A",
+    "submitted_at": "2025-12-28T19:54:46.598Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 32,
+  "fields": {
+    "session": 20,
+    "student": "divyanshcom685@gmail.com",
+    "status": "P",
+    "submitted_at": "2026-02-05T17:58:48.749Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 33,
+  "fields": {
+    "session": 21,
+    "student": "divyanshcom685@gmail.com",
+    "status": "A",
+    "submitted_at": "2026-02-05T17:59:15.865Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.attendance",
+  "pk": 34,
+  "fields": {
+    "session": 22,
+    "student": "divyanshcom685@gmail.com",
+    "status": "P",
+    "submitted_at": "2026-02-05T17:59:35.496Z",
+    "retry_count": 0
+  }
+},
+{
+  "model": "core.device",
+  "pk": 1,
+  "fields": {
+    "user_email": "YOUR_EMAIL@gmail.com",
+    "device_uuid": "7ee6930d-2e0b-416b-8b98-f9c23da1dec5",
+    "fingerprint_hash": "test-fingerprint-hash",
+    "integrity_level": "",
+    "platform": "WEB",
+    "active": true,
+    "registered_at": "2025-12-25T20:31:10.336Z",
+    "last_login": "2025-12-25T20:31:10.336Z"
+  }
+},
+{
+  "model": "core.studentclass",
+  "pk": 11,
+  "fields": {
+    "student": "divyanshcom685@gmail.com",
+    "class_obj": 16,
+    "roll_no": "22030102",
+    "enrolled_at": "2025-12-28T19:07:21.662Z"
+  }
+},
+{
+  "model": "core.studentclass",
+  "pk": 12,
+  "fields": {
+    "student": "divyanshcom685@gmail.com",
+    "class_obj": 14,
+    "roll_no": "22030102",
+    "enrolled_at": "2026-02-05T17:57:59.307Z"
+  }
+},
+{
+  "model": "core.periodtimeslot",
+  "pk": 1,
+  "fields": {
+    "teacher": "divyanshece242@gmail.com",
+    "period_no": 1,
+    "start_time": "10:00:00",
+    "end_time": "11:00:00"
+  }
+},
+{
+  "model": "core.periodtimeslot",
+  "pk": 2,
+  "fields": {
+    "teacher": "rsirvastav593@gmail.com",
+    "period_no": 1,
+    "start_time": "10:00:00",
+    "end_time": "00:00:00"
+  }
+},
+{
+  "model": "core.periodtimeslot",
+  "pk": 3,
+  "fields": {
+    "teacher": "divyanshsingh1466@gmail.com",
+    "period_no": 1,
+    "start_time": "10:00:00",
+    "end_time": "11:00:00"
+  }
+},
+{
+  "model": "core.subjectenrollment",
+  "pk": 6,
+  "fields": {
+    "subject": 18,
+    "student": "divyanshcom685@gmail.com",
+    "enrolled_at": "2025-12-28T19:09:08.848Z",
+    "enrolled_by": "divyanshsingh1466@gmail.com"
+  }
+},
+{
+  "model": "core.subjectenrollment",
+  "pk": 7,
+  "fields": {
+    "subject": 20,
+    "student": "divyanshcom685@gmail.com",
+    "enrolled_at": "2025-12-28T19:53:33.991Z",
+    "enrolled_by": "rsirvastav593@gmail.com"
+  }
+},
+{
+  "model": "core.subjectenrollment",
+  "pk": 8,
+  "fields": {
+    "subject": 21,
+    "student": "divyanshcom685@gmail.com",
+    "enrolled_at": "2026-02-05T17:58:08.136Z",
+    "enrolled_by": "divyanshece242@gmail.com"
+  }
+}
+]

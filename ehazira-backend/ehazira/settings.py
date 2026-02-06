@@ -160,8 +160,29 @@ else:
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8081",
     ]
+
+# Mobile app origins (Capacitor)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost(:\d+)?$",  # Capacitor Android/iOS
+    r"^capacitor://localhost$",    # Capacitor iOS
+    r"^https?://192\.168\.\d+\.\d+(:\d+)?$",  # Local network testing
+]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
+
+# CSRF Trusted Origins (for Django admin and forms)
+CSRF_TRUSTED_ORIGINS_STR = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+if CSRF_TRUSTED_ORIGINS_STR:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in CSRF_TRUSTED_ORIGINS_STR.split(',') if o.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "https://web-production-c34f0.up.railway.app",
+    ]
 
 # Security Settings
 JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)

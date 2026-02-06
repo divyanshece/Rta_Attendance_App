@@ -1490,7 +1490,6 @@ function SubjectEnrollmentModal({ subjectId, subjectName, onClose }: { subjectId
           </div>
         )}
       </div>
-      {ConfirmDialog}
     </div>
   )
 }

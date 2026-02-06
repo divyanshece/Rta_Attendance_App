@@ -38,7 +38,7 @@ class JWTAuthenticationMiddleware:
             '/departments',
         ]
 
-        if path in public_paths or request.path.startswith('/admin/') or request.path.startswith('/departments'):
+        if path in public_paths or path == '/admin' or request.path.startswith('/admin/') or request.path.startswith('/departments') or request.path.startswith('/static/'):
             return self.get_response(request)
         
         # Get token from Authorization header
