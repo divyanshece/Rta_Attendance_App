@@ -1,7 +1,19 @@
+import math
+
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from django.conf import settings
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Calculate distance in meters between two GPS coordinates using Haversine formula."""
+    R = 6371000  # Earth's radius in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 class AttendanceConsumer(AsyncJsonWebsocketConsumer):
@@ -30,8 +42,10 @@ class AttendanceConsumer(AsyncJsonWebsocketConsumer):
             otp = content.get('otp')
             student_email = content.get('student_email')
             device_id = content.get('device_id')  # For security verification
+            latitude = content.get('latitude')
+            longitude = content.get('longitude')
 
-            result = await self.process_otp(session_id, otp, student_email, device_id)
+            result = await self.process_otp(session_id, otp, student_email, device_id, latitude, longitude)
             await self.send_json(result)
 
             # Broadcast to teacher if successful
@@ -42,7 +56,7 @@ class AttendanceConsumer(AsyncJsonWebsocketConsumer):
                         'type': 'attendance_update',
                         'session_id': session_id,
                         'student_email': result.get('student_email'),
-                        'status': 'P'
+                        'status': result.get('status', 'P')
                     }
                 )
 
@@ -50,7 +64,7 @@ class AttendanceConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({'type': 'echo', 'data': content})
 
     @database_sync_to_async
-    def process_otp(self, session_id, otp, student_email, device_id=None):
+    def process_otp(self, session_id, otp, student_email, device_id=None, latitude=None, longitude=None):
         from core.models import Session, Attendance, Student, Device
 
         MAX_RETRY_COUNT = 3
@@ -182,16 +196,40 @@ class AttendanceConsumer(AsyncJsonWebsocketConsumer):
                     'remaining_attempts': remaining_attempts
                 }
 
-            # OTP is valid - mark attendance
-            attendance.status = 'P'
+            # OTP is valid - determine status based on GPS proximity
+            if session.class_mode == 'offline' and session.teacher_latitude is not None and session.teacher_longitude is not None:
+                if latitude is not None and longitude is not None:
+                    try:
+                        distance = haversine(
+                            session.teacher_latitude, session.teacher_longitude,
+                            float(latitude), float(longitude)
+                        )
+                        if distance <= session.proximity_radius:
+                            attendance.status = 'P'
+                            message = 'Attendance marked successfully'
+                        else:
+                            attendance.status = 'X'
+                            message = 'Attendance flagged — you appear to be outside classroom range'
+                    except (ValueError, TypeError):
+                        attendance.status = 'X'
+                        message = 'Attendance flagged — invalid location data'
+                else:
+                    # No GPS data from student in offline mode
+                    attendance.status = 'X'
+                    message = 'Attendance flagged — location not available'
+            else:
+                # Online mode or no teacher location — just mark Present
+                attendance.status = 'P'
+                message = 'Attendance marked successfully'
+
             attendance.submitted_at = timezone.now()
             attendance.save()
 
             return {
                 'type': 'otp_result',
                 'success': True,
-                'message': 'Attendance marked successfully',
-                'status': 'P',
+                'message': message,
+                'status': attendance.status,
                 'student_email': student.student_email
             }
 

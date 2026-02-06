@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, BarChart3, Users, BookOpen, TrendingUp } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface ClassDetail {
   class_id: number
@@ -65,7 +64,7 @@ export default function TeacherReports() {
   const { data: classReports = [], isLoading: isLoadingReports } = useQuery({
     queryKey: ['classReport', selectedClass, selectedSubject],
     queryFn: () =>
-      selectedClass ? reportsAPI.getClassReport(selectedClass, selectedSubject || undefined) : null,
+      selectedClass ? reportsAPI.getClassReport(selectedClass, selectedSubject || undefined) : Promise.resolve([]),
     enabled: !!selectedClass,
   })
 
@@ -97,7 +96,6 @@ export default function TeacherReports() {
                 </p>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </header>

@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -11,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-&!oy6ei)!tfspj@ks9%ehsj7%sxni-eg5iwcko(lx$6dl!&7%0')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,172.18.14.78,0.0.0.0').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -28,8 +29,16 @@ INSTALLED_APPS = [
     'core',
 ]
 
+_whitenoise_available = False
+try:
+    import whitenoise  # noqa: F401
+    _whitenoise_available = True
+except ImportError:
+    pass
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    *([ 'whitenoise.middleware.WhiteNoiseMiddleware'] if _whitenoise_available else []),
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -61,12 +70,29 @@ WSGI_APPLICATION = 'ehazira.wsgi.application'
 ASGI_APPLICATION = 'ehazira.asgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DATABASE_URL = os.getenv('DATABASE_URL', '')
+
+if DATABASE_URL:
+    try:
+        import dj_database_url
+        DATABASES = {
+            'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+        }
+    except ImportError:
+        # dj-database-url not installed, fall back to SQLite
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -84,6 +110,9 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+if _whitenoise_available:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework
@@ -106,10 +135,13 @@ REDIS_URL = os.getenv('REDIS_URL', '')
 
 if REDIS_URL:
     CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+            },
+        },
+    }
 else:
     CHANNEL_LAYERS = {
         'default': {
@@ -118,13 +150,16 @@ else:
     }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8081",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:8081",
-    "http://172.18.14.78:3000",
-]
+CORS_ALLOWED_ORIGINS_STR = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if CORS_ALLOWED_ORIGINS_STR:
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in CORS_ALLOWED_ORIGINS_STR.split(',') if o.strip()]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://localhost:8081",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8081",
+    ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
 
@@ -137,6 +172,10 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 
 # Firebase Cloud Messaging
 FCM_SERVER_KEY = os.getenv('FCM_SERVER_KEY', '')
+
+# Firebase Admin SDK key — can be a file path or a JSON string in env var
+FIREBASE_KEY_PATH = os.getenv('FIREBASE_KEY_PATH', 'firebase-key.json')
+FIREBASE_KEY_JSON = os.getenv('FIREBASE_KEY_JSON', '')
 
 # OTP Configuration
 OTP_VALIDITY_SECONDS = int(os.getenv('OTP_VALIDITY_SECONDS', 15))
@@ -157,7 +196,7 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'INFO' if not DEBUG else 'DEBUG',
             'propagate': False,
         },
     },

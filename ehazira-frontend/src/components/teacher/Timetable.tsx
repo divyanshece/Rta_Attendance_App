@@ -13,7 +13,6 @@ import {
   X,
   Edit3,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import toast from 'react-hot-toast'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -104,16 +103,27 @@ export default function TeacherTimetable() {
     scheduleMap.set(key, item)
   })
 
-  const scrollTable = (direction: 'left' | 'right') => {
+  const [focusedDay, setFocusedDay] = useState(() => {
+    const today = new Date().getDay()
+    return today === 0 ? 0 : today - 1 // Sunday defaults to Monday
+  })
+
+  const scrollToDay = (dayIndex: number) => {
     const container = document.getElementById('timetable-container')
-    if (container) {
-      const scrollAmount = 200
-      const newPosition = direction === 'left'
-        ? Math.max(0, scrollPosition - scrollAmount)
-        : scrollPosition + scrollAmount
-      container.scrollTo({ left: newPosition, behavior: 'smooth' })
-      setScrollPosition(newPosition)
-    }
+    if (!container) return
+    const stickyColWidth = 100
+    const colWidth = 100
+    const containerWidth = container.clientWidth - stickyColWidth
+    const targetLeft = stickyColWidth + dayIndex * colWidth + colWidth / 2 - containerWidth / 2
+    container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' })
+  }
+
+  const scrollTable = (direction: 'left' | 'right') => {
+    const nextDay = direction === 'left'
+      ? Math.max(0, focusedDay - 1)
+      : Math.min(DAYS.length - 1, focusedDay + 1)
+    setFocusedDay(nextDay)
+    scrollToDay(nextDay)
   }
 
   // Get today's day index (0 = Monday, 5 = Saturday)
@@ -180,7 +190,6 @@ export default function TeacherTimetable() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <ThemeToggle />
               <Button
                 variant="outline"
                 onClick={() => navigate('/teacher/classes')}

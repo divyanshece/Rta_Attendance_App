@@ -233,6 +233,15 @@
   }
 }
 
+/* iOS safe area insets (notch, Dynamic Island, home indicator) */
+header {
+  padding-top: env(safe-area-inset-top);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

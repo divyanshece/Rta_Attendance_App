@@ -181,6 +181,11 @@ class Period(models.Model):
 
 
 class Session(models.Model):
+    CLASS_MODE_CHOICES = [
+        ('offline', 'Offline'),
+        ('online', 'Online'),
+    ]
+
     session_id = models.AutoField(primary_key=True)
     period = models.ForeignKey(Period, on_delete=models.CASCADE)
     date = models.DateField()
@@ -188,6 +193,11 @@ class Session(models.Model):
     otp_generated_at = models.DateTimeField(blank=True, null=True)
     is_active = models.BooleanField(default=False)
     closed_at = models.DateTimeField(blank=True, null=True)
+    # GPS proximity fields
+    class_mode = models.CharField(max_length=10, choices=CLASS_MODE_CHOICES, default='offline')
+    teacher_latitude = models.FloatField(null=True, blank=True)
+    teacher_longitude = models.FloatField(null=True, blank=True)
+    proximity_radius = models.IntegerField(default=30)  # meters
 
     class Meta:
         db_table = 'session'
@@ -213,6 +223,7 @@ class Attendance(models.Model):
         ('P', 'Present'),
         ('A', 'Absent'),
         ('R', 'Retry'),
+        ('X', 'Proxy'),
     ]
     
     session = models.ForeignKey(Session, on_delete=models.CASCADE, db_column='session_id')

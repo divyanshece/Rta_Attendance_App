@@ -5,8 +5,8 @@ import { websocketService } from '@/services/websocket'
 import { useAuthStore } from '@/store/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2, CheckCircle2, Clock, XCircle } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { ArrowLeft, Loader2, CheckCircle2, Clock, XCircle, MapPin, ShieldAlert } from 'lucide-react'
+import { getCurrentPosition } from '@/utils/native'
 
 export default function StudentAttendance() {
   const navigate = useNavigate()
@@ -20,6 +20,9 @@ export default function StudentAttendance() {
   const [attendanceMarked, setAttendanceMarked] = useState(false)
   const [retryCount, setRetryCount] = useState(0) // RETRY COUNTER
   const [isBlocked, setIsBlocked] = useState(false) // BLOCKED AFTER 3 ATTEMPTS
+  const [studentLocation, setStudentLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationStatus, setLocationStatus] = useState<'pending' | 'acquired' | 'denied' | 'error'>('pending')
+  const [isProxy, setIsProxy] = useState(false)
 
   useEffect(() => {
     if (accessToken) {
@@ -29,17 +32,37 @@ export default function StudentAttendance() {
         if (msg.session_id) {
           setSessionId(msg.session_id)
           toast.success('Attendance session started!')
+
+          // Request GPS location for proximity check
+          setLocationStatus('pending')
+          getCurrentPosition()
+            .then((loc) => {
+              setStudentLocation(loc)
+              setLocationStatus('acquired')
+            })
+            .catch(() => {
+              setLocationStatus('denied')
+            })
         }
       })
 
-      websocketService.on('otp_result', (msg: { success?: boolean; message?: string }) => {
+      websocketService.on('otp_result', (msg: { success?: boolean; message?: string; status?: string }) => {
         setIsSubmitting(false)
         if (msg.success) {
-          setAttendanceMarked(true)
-          toast.success(msg.message || 'Attendance marked!')
-          setTimeout(() => {
-            navigate('/student')
-          }, 2000)
+          if (msg.status === 'X') {
+            // Proxy — correct OTP but out of GPS range
+            setIsProxy(true)
+            toast.error(msg.message || 'Attendance flagged as Proxy')
+            setTimeout(() => {
+              navigate('/student')
+            }, 3000)
+          } else {
+            setAttendanceMarked(true)
+            toast.success(msg.message || 'Attendance marked!')
+            setTimeout(() => {
+              navigate('/student')
+            }, 2000)
+          }
         } else {
           const newRetryCount = retryCount + 1
           setRetryCount(newRetryCount)
@@ -114,7 +137,29 @@ export default function StudentAttendance() {
       session_id: sessionId,
       otp: otpValue,
       student_email: user?.email,
+      latitude: studentLocation?.lat ?? null,
+      longitude: studentLocation?.lng ?? null,
     })
+  }
+
+  if (isProxy) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <Card className="max-w-md w-full mx-4 text-center border-purple-200 dark:border-purple-800">
+          <CardHeader>
+            <div className="mx-auto w-16 h-16 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center mb-4">
+              <ShieldAlert className="h-10 w-10 text-purple-600 dark:text-purple-400" />
+            </div>
+            <CardTitle className="text-2xl text-purple-600 dark:text-purple-400">
+              Attendance Flagged
+            </CardTitle>
+            <CardDescription className="text-base mt-2">
+              Your attendance was flagged because your location could not be verified near the classroom. Your teacher will review this.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    )
   }
 
   if (isBlocked) {
@@ -174,7 +219,6 @@ export default function StudentAttendance() {
                   <p className="text-sm text-gray-600 dark:text-gray-400">Waiting for session</p>
                 </div>
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </header>
@@ -222,7 +266,6 @@ export default function StudentAttendance() {
                 </p>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -241,6 +284,23 @@ export default function StudentAttendance() {
                 </p>
               </div>
             )}
+            <div className="mt-3 flex items-center justify-center gap-2 text-sm">
+              <MapPin className={`h-4 w-4 ${
+                locationStatus === 'acquired' ? 'text-green-500' :
+                locationStatus === 'denied' || locationStatus === 'error' ? 'text-yellow-500' :
+                'text-gray-400 animate-pulse'
+              }`} />
+              <span className={
+                locationStatus === 'acquired' ? 'text-green-600 dark:text-green-400' :
+                locationStatus === 'denied' || locationStatus === 'error' ? 'text-yellow-600 dark:text-yellow-400' :
+                'text-gray-500 dark:text-gray-400'
+              }>
+                {locationStatus === 'acquired' ? 'Location acquired' :
+                 locationStatus === 'denied' ? 'Location denied — may affect attendance' :
+                 locationStatus === 'error' ? 'Location unavailable' :
+                 'Getting location...'}
+              </span>
+            </div>
           </CardHeader>
           <CardContent className="pb-8">
             {/* OTP Input Boxes - 4 DIGITS */}

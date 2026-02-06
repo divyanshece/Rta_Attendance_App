@@ -20,7 +20,6 @@ import {
   Info,
   Landmark,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AppLogoIcon, AppLogoCompact } from '@/components/ui/AppLogo'
 
 interface StudentProfile {
@@ -109,7 +108,6 @@ export default function StudentSettings() {
                 <p className="text-xs text-muted-foreground">Your account details</p>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </header>

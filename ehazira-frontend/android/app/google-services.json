@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "1039107164512",
+    "project_id": "ehazira-49b97",
+    "storage_bucket": "ehazira-49b97.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1039107164512:android:a5c4aafd7e6ec2b450f605",
+        "android_client_info": {
+          "package_name": "com.ehazira.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1039107164512-2nd658sc3lf4en9maefpd06dhmeal2g0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ehazira.app",
+            "certificate_hash": "6f9c235a66115f02fe9d655258da40506a1c4071"
+          }
+        },
+        {
+          "client_id": "1039107164512-dq4up6d2u7ke29seehpcmroet0od7a4g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCUDZCZWdPnJcVKNWbjtySZH1MIZVZU9V0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1039107164512-dq4up6d2u7ke29seehpcmroet0od7a4g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1039107164512-1dbj8et2t9rigv7jrmiaas3pgadh3vf6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.ehazira.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

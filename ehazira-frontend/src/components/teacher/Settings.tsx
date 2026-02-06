@@ -18,7 +18,6 @@ import {
   KeyRound,
   Landmark,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AppLogoIcon, AppLogoCompact } from '@/components/ui/AppLogo'
 import toast from 'react-hot-toast'
 
@@ -137,7 +136,6 @@ export default function TeacherSettings() {
                 <p className="text-xs text-muted-foreground">Manage your profile</p>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </header>

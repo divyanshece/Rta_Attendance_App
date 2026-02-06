@@ -1,5 +1,5 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from './store/auth'
 import { ROUTES } from './utils/constants'
 import Login from './components/auth/Login'
@@ -20,6 +20,7 @@ import TeacherSettings from './components/teacher/Settings'
 import TeacherAnnouncements from './components/teacher/Announcements'
 import StudentAnnouncements from './components/student/Announcements'
 import TeacherAdmin from './components/teacher/Admin'
+import Onboarding, { hasCompletedOnboarding } from './components/Onboarding'
 
 function ProtectedRoute({
   children,
@@ -41,10 +42,54 @@ function ProtectedRoute({
   return <>{children}</>
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
+function ExitConfirmDialog({ open, onConfirm, onCancel }: { open: boolean; onConfirm: () => void; onCancel: () => void }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+      <div
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6 mx-6 w-full max-w-xs border border-slate-200 dark:border-slate-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-heading font-semibold text-slate-800 dark:text-white text-center mb-2">
+          Exit App?
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 text-center mb-6">
+          Are you sure you want to exit?
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const { isAuthenticated, user } = useAuthStore()
   const { theme } = useThemeStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [showExitDialog, setShowExitDialog] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -64,8 +109,62 @@ function App() {
     }
   }, [])
 
+  // Hardware back button handling (Android)
+  const handleExitConfirm = useCallback(async () => {
+    setShowExitDialog(false)
+    try {
+      const { App: CapApp } = await import('@capacitor/app')
+      CapApp.exitApp()
+    } catch {
+      // On web, just close the dialog
+    }
+  }, [])
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined
+
+    async function setupBackButton() {
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+        if (!Capacitor.isNativePlatform()) return
+
+        const { App: CapApp } = await import('@capacitor/app')
+        const listener = await CapApp.addListener('backButton', ({ canGoBack }) => {
+          const path = window.location.pathname
+          const isRootScreen =
+            path === '/login' ||
+            path === '/teacher' ||
+            path === '/student'
+
+          if (isRootScreen) {
+            setShowExitDialog(true)
+          } else if (canGoBack) {
+            window.history.back()
+          }
+        })
+
+        cleanup = () => listener.remove()
+      } catch {
+        // Not on native platform
+      }
+    }
+
+    setupBackButton()
+    return () => cleanup?.()
+  }, [])
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={() => setShowOnboarding(false)} />
+  }
+
   return (
     <div className="min-h-screen">
+      <ScrollToTop />
+      <ExitConfirmDialog
+        open={showExitDialog}
+        onConfirm={handleExitConfirm}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <Routes>
         <Route
           path={ROUTES.LOGIN}

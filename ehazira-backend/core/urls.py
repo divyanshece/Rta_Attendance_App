@@ -55,6 +55,7 @@ from .views import (
     CreateTeacherView,
     SubjectEnrollmentView,
     EnrollAllStudentsView,
+    ExportSubjectAttendanceView,
     # Organization Admin Management
     AdminCheckView,
     AdminDashboardView,
@@ -145,6 +146,7 @@ urlpatterns = [
     # Subject Enrollment (subject-wise student management)
     path('subjects/<int:pk>/students/', SubjectEnrollmentView.as_view(), name='subject-enrollment'),
     path('subjects/<int:pk>/students/enroll-all/', EnrollAllStudentsView.as_view(), name='enroll-all-students'),
+    path('subjects/<int:pk>/export-register/', ExportSubjectAttendanceView.as_view(), name='export-subject-register'),
 
     # Organization Admin Management
     path('admin/check/', AdminCheckView.as_view(), name='admin-check'),

@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   BookOpen,
   Settings,
-  LogOut,
   ChevronRight,
   TrendingUp,
   TrendingDown,
@@ -73,7 +72,7 @@ interface TodayScheduleItem {
 
 export default function StudentDashboard() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
 
   const { data: classesData = [], isLoading: isLoadingClasses } = useQuery({
     queryKey: ['studentClasses'],
@@ -163,14 +162,6 @@ export default function StudentDashboard() {
                 className="rounded-xl"
               >
                 <Settings className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={logout}
-                className="rounded-xl text-muted-foreground hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>

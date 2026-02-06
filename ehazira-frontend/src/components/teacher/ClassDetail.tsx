@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classAPI, scheduleAPI, studentLookupAPI, subjectAPI } from '@/services/api'
+import { classAPI, scheduleAPI, studentLookupAPI, subjectAPI, exportRegisterAPI } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -24,9 +24,11 @@ import {
   MoreVertical,
   UserPlus2,
   Crown,
+  Calendar,
+  FileDown,
 } from 'lucide-react'
 import { TeacherManagementModal } from './Classes'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import toast from 'react-hot-toast'
 
 interface StudentEnrollment {
@@ -91,6 +93,7 @@ export default function ClassDetailPage() {
   const navigate = useNavigate()
   const { classId } = useParams<{ classId: string }>()
   const queryClient = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [activeTab, setActiveTab] = useState<'students' | 'subjects' | 'stats'>('students')
 
   // Modal states
@@ -108,6 +111,10 @@ export default function ClassDetailPage() {
   const [periodForm, setPeriodForm] = useState<{ days: number[]; periods: number[] }>({ days: [], periods: [] })
   const [importFile, setImportFile] = useState<File | null>(null)
   const [exportingSubjectId, setExportingSubjectId] = useState<number | null>(null)
+  const [showExportModal, setShowExportModal] = useState<{ subjectId: number; subjectName: string } | null>(null)
+  const [exportMonths, setExportMonths] = useState<{ month: number; year: number; month_name: string; total_sessions: number }[]>([])
+  const [isLoadingExportMonths, setIsLoadingExportMonths] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // Student lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -306,54 +313,166 @@ export default function ClassDetailPage() {
     }
   }
 
-  const handleExportSubject = async (subjectId: number, subjectName: string) => {
-    setExportingSubjectId(subjectId)
+  const handleOpenExportModal = async (subjectId: number, subjectName: string) => {
+    setShowExportModal({ subjectId, subjectName })
+    setIsLoadingExportMonths(true)
+    setExportMonths([])
     try {
-      const exportData = await classAPI.exportAttendance(classIdNum)
+      const data = await exportRegisterAPI.getMonths(subjectId)
+      setExportMonths(data.months)
+    } catch {
+      toast.error('Failed to load export data')
+      setShowExportModal(null)
+    } finally {
+      setIsLoadingExportMonths(false)
+    }
+  }
 
-      // Filter for the specific subject only
-      const headers = ['Roll No', 'Name', 'Email', 'Present', 'Total Sessions', 'Attendance %']
+  const downloadCSV = async (content: string, filename: string) => {
+    try {
+      const { Capacitor } = await import('@capacitor/core')
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
 
-      const rows = exportData.students.map(student => {
-        const subj = student.subjects.find(s => s.course_name === subjectName)
-        return [
-          student.roll_no,
-          student.name,
-          student.email,
-          subj ? subj.present : 0,
-          subj ? subj.total_sessions : 0,
-          subj ? `${subj.percentage}%` : '0%'
-        ]
+        // Save directly to Documents folder (accessible in Files app)
+        await Filesystem.writeFile({
+          path: filename,
+          data: content,
+          directory: Directory.Documents,
+          encoding: Encoding.UTF8,
+        })
+        return
+      }
+    } catch {
+      // Fall through to web download
+    }
+
+    // Web: standard blob download
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+  }
+
+  const escapeCSV = (val: string | number) => {
+    const str = String(val)
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`
+    }
+    return str
+  }
+
+  const handleExportMonthly = async (month: number, year: number, monthName: string) => {
+    if (!showExportModal) return
+    setIsExporting(true)
+    try {
+      const data = await exportRegisterAPI.getMonthly(showExportModal.subjectId, month, year)
+
+      // Build date column headers: "06 Jan (Mon)"
+      const dateHeaders = data.sessions.map(s => {
+        const d = new Date(s.date)
+        const day = d.getDate().toString().padStart(2, '0')
+        const mon = d.toLocaleString('en-US', { month: 'short' })
+        const dayName = s.day.substring(0, 3)
+        return `${day} ${mon} (${dayName})`
       })
 
-      // Create CSV content
+      const headers = ['S.No', 'Roll No', 'Name', 'Email', ...dateHeaders, 'Total Present', 'Total Classes', 'Attendance %']
+
+      const rows = data.students.map((student, idx) => [
+        idx + 1,
+        escapeCSV(student.roll_no),
+        escapeCSV(student.name),
+        escapeCSV(student.email),
+        ...student.attendance,
+        student.total_present,
+        student.total_classes,
+        `${student.percentage}%`,
+      ])
+
       const csvContent = [
-        `Class: ${exportData.class_info.class_name}`,
-        `Department: ${exportData.class_info.department}`,
-        `Subject: ${subjectName}`,
-        `Batch: ${exportData.class_info.batch}, Semester: ${exportData.class_info.semester}${exportData.class_info.section?.trim() ? `, Section: ${exportData.class_info.section}` : ''}`,
-        `Exported: ${new Date(exportData.class_info.exported_at).toLocaleString()}`,
+        `Subject: ${escapeCSV(data.subject_name)}`,
+        `Class: ${escapeCSV(data.class_name)}`,
+        `Department: ${escapeCSV(data.department)}`,
+        `Teacher: ${escapeCSV(data.teacher_name)}`,
+        `Month: ${monthName} ${year}`,
+        `Batch: ${data.batch}${data.section?.trim() ? ` | Semester: ${data.semester} | Section: ${data.section}` : ` | Semester: ${data.semester}`}`,
+        `Exported: ${new Date().toLocaleString()}`,
         '',
-        headers.join(','),
+        headers.map(h => escapeCSV(h)).join(','),
         ...rows.map(row => row.join(','))
       ].join('\n')
 
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance_${subjectName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast.success(`${subjectName} attendance exported`)
+      const filename = `attendance_${data.subject_name.replace(/\s+/g, '_')}_${monthName}_${year}.csv`
+      await downloadCSV(csvContent, filename)
+      toast.success(`${monthName} ${year} attendance exported`)
     } catch {
-      toast.error('Failed to export attendance')
+      toast.error('Failed to export monthly attendance')
     } finally {
-      setExportingSubjectId(null)
+      setIsExporting(false)
+    }
+  }
+
+  const handleExportSemester = async () => {
+    if (!showExportModal) return
+    setIsExporting(true)
+    try {
+      const data = await exportRegisterAPI.getSemester(showExportModal.subjectId)
+
+      // Build month column headers: "Jan '26 (P/T)", "Jan '26 %"
+      const monthHeaders: string[] = []
+      for (const m of data.months) {
+        const shortMonth = m.month_name.substring(0, 3)
+        const shortYear = String(m.year).substring(2)
+        monthHeaders.push(`${shortMonth} '${shortYear} (P/T)`)
+        monthHeaders.push(`${shortMonth} '${shortYear} %`)
+      }
+
+      const headers = ['S.No', 'Roll No', 'Name', 'Email', ...monthHeaders, 'Total Present', 'Total Classes', 'Overall %']
+
+      const rows = data.students.map((student, idx) => {
+        const monthCols: (string | number)[] = []
+        for (const ms of student.monthly_stats) {
+          monthCols.push(`${ms.present}/${ms.total}`)
+          monthCols.push(`${ms.percentage}%`)
+        }
+        return [
+          idx + 1,
+          escapeCSV(student.roll_no),
+          escapeCSV(student.name),
+          escapeCSV(student.email),
+          ...monthCols,
+          student.total_present,
+          student.total_classes,
+          `${student.percentage}%`,
+        ]
+      })
+
+      const csvContent = [
+        `Subject: ${escapeCSV(data.subject_name)}`,
+        `Class: ${escapeCSV(data.class_name)}`,
+        `Department: ${escapeCSV(data.department)}`,
+        `Teacher: ${escapeCSV(data.teacher_name)}`,
+        `Semester Summary`,
+        `Batch: ${data.batch}${data.section?.trim() ? ` | Semester: ${data.semester} | Section: ${data.section}` : ` | Semester: ${data.semester}`}`,
+        `Exported: ${new Date().toLocaleString()}`,
+        '',
+        headers.map(h => escapeCSV(h)).join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n')
+
+      const filename = `attendance_${data.subject_name.replace(/\s+/g, '_')}_semester_summary.csv`
+      await downloadCSV(csvContent, filename)
+      toast.success('Semester summary exported')
+    } catch {
+      toast.error('Failed to export semester summary')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -435,9 +554,9 @@ export default function ClassDetailPage() {
                       {classInfo?.is_active && classInfo?.is_coordinator && (
                         <button
                           className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                          onClick={() => {
+                          onClick={async () => {
                             setShowMenu(false)
-                            if (confirm('Mark this semester as complete? This will close any active sessions.')) {
+                            if (await confirm('End Semester', 'Mark this semester as complete? This will close any active sessions.', { confirmLabel: 'Complete', destructive: false })) {
                               markCompleteMutation.mutate()
                             }
                           }}
@@ -450,9 +569,9 @@ export default function ClassDetailPage() {
                       {classInfo?.is_coordinator && (
                         <button
                           className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-xs sm:text-sm hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 text-red-600"
-                          onClick={() => {
+                          onClick={async () => {
                             setShowMenu(false)
-                            if (confirm('Delete this class? This action cannot be undone.')) {
+                            if (await confirm('Delete Class', 'Delete this class? This action cannot be undone.', { confirmLabel: 'Delete' })) {
                               deleteClassMutation.mutate()
                             }
                           }}
@@ -466,7 +585,6 @@ export default function ClassDetailPage() {
                   </>
                 )}
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -564,8 +682,8 @@ export default function ClassDetailPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          if (confirm(`Remove ${student.student_name} from this class?`)) {
+                        onClick={async () => {
+                          if (await confirm('Remove Student', `Remove ${student.student_name} from this class?`, { confirmLabel: 'Remove' })) {
                             removeStudentMutation.mutate(student.student_email)
                           }
                         }}
@@ -655,12 +773,12 @@ export default function ClassDetailPage() {
                                       P{p.period_no}
                                       {(p.can_manage || subject.can_manage) && (
                                         <button
-                                          onClick={() => {
-                                            if (confirm('Delete this period?')) {
+                                          onClick={async () => {
+                                            if (await confirm('Delete Period', 'Delete this period?', { confirmLabel: 'Delete' })) {
                                               deletePeriodMutation.mutate(p.period_id)
                                             }
                                           }}
-                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 sm:transition-opacity flex items-center justify-center"
+                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 text-white rounded-full text-[8px] sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity flex items-center justify-center"
                                         >
                                           <X className="h-2 w-2" />
                                         </button>
@@ -763,18 +881,11 @@ export default function ClassDetailPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleExportSubject(subject.subject_id, subject.course_name)}
-                                disabled={exportingSubjectId === subject.subject_id}
+                                onClick={() => handleOpenExportModal(subject.subject_id, subject.course_name)}
                                 className="rounded-xl h-8 px-2 sm:px-3"
                               >
-                                {exportingSubjectId === subject.subject_id ? (
-                                  <div className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-slate-600 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Download className="h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">Export</span>
-                                  </>
-                                )}
+                                <Download className="h-4 w-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Export</span>
                               </Button>
                             )}
                           </div>
@@ -1124,6 +1235,94 @@ export default function ClassDetailPage() {
           onClose={() => setShowTeacherModal(false)}
         />
       )}
+
+      {/* Export Attendance Register Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="max-w-lg w-full bg-card rounded-3xl shadow-2xl overflow-hidden animate-in opacity-0">
+            <div className="p-6 border-b">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/50">
+                  <FileDown className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-heading font-bold text-xl text-foreground">Export Attendance Register</h3>
+                  <p className="text-sm text-muted-foreground">{showExportModal.subjectName}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => { setShowExportModal(null); setExportMonths([]) }}
+                  className="rounded-xl"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {isLoadingExportMonths ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 animate-spin" />
+                </div>
+              ) : exportMonths.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground">No attendance sessions found for this subject.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Select a month for date-wise attendance register (1/0 for each class)
+                  </p>
+
+                  {/* Month Chips */}
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {exportMonths.map((m) => {
+                      const shortMonth = m.month_name.substring(0, 3)
+                      const shortYear = String(m.year).substring(2)
+                      return (
+                        <button
+                          key={`${m.year}-${m.month}`}
+                          onClick={() => handleExportMonthly(m.month, m.year, m.month_name)}
+                          disabled={isExporting}
+                          className="flex flex-col items-center px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="text-sm font-semibold text-foreground">{shortMonth} '{shortYear}</span>
+                          <span className="text-[10px] text-muted-foreground">{m.total_sessions} classes</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+
+                  {/* Semester Summary Button */}
+                  <Button
+                    onClick={handleExportSemester}
+                    disabled={isExporting}
+                    className="w-full rounded-xl h-12 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 dark:text-white"
+                  >
+                    {isExporting ? (
+                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Exporting...</>
+                    ) : (
+                      <><FileSpreadsheet className="mr-2 h-5 w-5" />Full Semester Summary</>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Month-wise summary with present/total for each month
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1291,6 +1490,7 @@ function SubjectEnrollmentModal({ subjectId, subjectName, onClose }: { subjectId
           </div>
         )}
       </div>
+      {ConfirmDialog}
     </div>
   )
 }

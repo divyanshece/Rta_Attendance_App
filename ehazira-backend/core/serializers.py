@@ -302,22 +302,26 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         return obj.class_field.section if obj.class_field else None
 
     def get_overall_attendance(self, obj):
-        """Calculate overall attendance percentage across all sessions"""
-        if not obj.class_field:
+        """Calculate overall attendance percentage across all enrolled classes"""
+        # Gather all class IDs: primary class + enrolled classes
+        enrolled_class_ids = list(
+            StudentClass.objects.filter(student=obj).values_list('class_obj_id', flat=True)
+        )
+        class_ids = enrolled_class_ids + ([obj.class_field_id] if obj.class_field_id else [])
+        if not class_ids:
             return 0.0
-        # Get total sessions for this student's class
-        total_sessions = Session.objects.filter(
-            period__subject__class_field=obj.class_field
-        ).count()
-        if total_sessions == 0:
-            return 0.0
-        # Get present count for this student
-        present_count = Attendance.objects.filter(
+
+        # Get attendance records for this student across all classes
+        student_attendance = Attendance.objects.filter(
             student=obj,
-            session__period__subject__class_field=obj.class_field,
-            status='P'
-        ).count()
-        return round((present_count / total_sessions) * 100, 2)
+            session__period__subject__class_field__class_id__in=class_ids,
+        )
+        present_count = student_attendance.filter(status='P').count()
+        absent_count = student_attendance.filter(status='A').count()
+        total_attended = present_count + absent_count
+        if total_attended == 0:
+            return 0.0
+        return round((present_count / total_attended) * 100, 2)
 
     def get_enrolled_classes(self, obj):
         enrollments = StudentClass.objects.filter(student=obj).select_related(

@@ -26,14 +26,17 @@ import {
   ChevronDown,
   Search,
   AlertTriangle,
+  MapPin,
+  Wifi,
+  ShieldAlert,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { getCurrentPosition } from '@/utils/native'
 
 interface AttendanceRecord {
   student_email: string
   student_name: string
   roll_no: string
-  status: 'P' | 'A'
+  status: 'P' | 'A' | 'X'
   status_display: string
   submitted_at: string | null
 }
@@ -67,6 +70,10 @@ export default function TeacherAttendance() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [showExitWarning, setShowExitWarning] = useState(false)
   const [otpExpired, setOtpExpired] = useState(false)
+  const [classMode, setClassMode] = useState<'offline' | 'online'>('offline')
+  const [teacherLocation, setTeacherLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
 
   // Reset session on mount
   useEffect(() => {
@@ -147,10 +154,13 @@ export default function TeacherAttendance() {
   })
 
   const initiateMutation = useMutation({
-    mutationFn: (subjectId: number) =>
+    mutationFn: (params: { subjectId: number; classMode: 'offline' | 'online'; teacherLatitude?: number; teacherLongitude?: number }) =>
       attendanceAPI.initiate({
-        subject_id: subjectId,
+        subject_id: params.subjectId,
         date: new Date().toISOString().split('T')[0],
+        class_mode: params.classMode,
+        teacher_latitude: params.teacherLatitude,
+        teacher_longitude: params.teacherLongitude,
       }),
     onSuccess: data => {
       setSession(data.session_id, data.otp, data.expires_in, data.total_students)
@@ -244,7 +254,7 @@ export default function TeacherAttendance() {
     }
   }, [currentSessionId, step, otpTimer, otpExpired])
 
-  const toggleStudentStatus = (email: string, currentStatus: 'P' | 'A') => {
+  const toggleStudentStatus = (email: string, currentStatus: string) => {
     manualMarkMutation.mutate({ email, status: currentStatus === 'P' ? 'A' : 'P' })
   }
 
@@ -254,14 +264,44 @@ export default function TeacherAttendance() {
   }
 
   const handleStartSession = () => {
-    if (selectedClass) initiateMutation.mutate(selectedClass.subject_id)
+    if (!selectedClass) return
+
+    if (classMode === 'offline') {
+      // Get teacher's GPS before starting
+      setIsGettingLocation(true)
+      setLocationError(null)
+      getCurrentPosition()
+        .then((loc) => {
+          setTeacherLocation(loc)
+          setIsGettingLocation(false)
+          initiateMutation.mutate({
+            subjectId: selectedClass.subject_id,
+            classMode: 'offline',
+            teacherLatitude: loc.lat,
+            teacherLongitude: loc.lng,
+          })
+        })
+        .catch(() => {
+          setIsGettingLocation(false)
+          setLocationError('Could not get your location. Please enable GPS and try again.')
+          toast.error('GPS location required for offline class mode')
+        })
+    } else {
+      // Online mode - no GPS needed
+      initiateMutation.mutate({
+        subjectId: selectedClass.subject_id,
+        classMode: 'online',
+      })
+    }
   }
 
   const students = liveData?.submissions || []
   const presentCount = liveData?.present || 0
   const absentCount = liveData?.absent || 0
   const pendingCount = liveData?.pending || 0
+  const proxyCount = liveData?.proxy || 0
   const totalStudents = liveData?.total_students || 0
+  const sessionClassMode = liveData?.class_mode || classMode
 
   // Filter classes based on search query
   const filteredClasses = classes.filter((cls: ClassForAttendance) => {
@@ -293,7 +333,6 @@ export default function TeacherAttendance() {
                   <p className="text-xs text-muted-foreground">Select any subject to start</p>
                 </div>
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </header>
@@ -482,11 +521,67 @@ export default function TeacherAttendance() {
                 </div>
               </div>
 
-              <div className="space-y-2 text-sm text-muted-foreground mb-8 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <div className="space-y-2 text-sm text-muted-foreground mb-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
                 <div className="flex justify-between"><span>Department</span><span className="text-foreground font-medium">{selectedClass.department_name}</span></div>
                 <div className="flex justify-between"><span>Batch</span><span className="text-foreground font-medium">{selectedClass.batch}</span></div>
                 <div className="flex justify-between"><span>Semester</span><span className="text-foreground font-medium">{selectedClass.semester}</span></div>
                 <div className="flex justify-between"><span>Section</span><span className="text-foreground font-medium">{selectedClass.section}</span></div>
+              </div>
+
+              {/* Offline / Online Toggle */}
+              <div className="mb-6 p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    {classMode === 'offline' ? (
+                      <MapPin className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Wifi className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">Class Mode</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setClassMode(classMode === 'offline' ? 'online' : 'offline')
+                      setLocationError(null)
+                    }}
+                    className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 ${
+                      classMode === 'online' ? 'bg-blue-500' : 'bg-emerald-500'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
+                        classMode === 'online' ? 'translate-x-8' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                    classMode === 'offline'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                  }`}>
+                    Offline Class
+                  </span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
+                    classMode === 'online'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                  }`}>
+                    Online Class
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {classMode === 'offline'
+                    ? 'GPS proximity check enabled (30m radius). Students outside range will be flagged as Proxy.'
+                    : 'No GPS check. Students can mark attendance from anywhere with OTP.'}
+                </p>
+                {locationError && (
+                  <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {locationError}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-3">
@@ -496,9 +591,11 @@ export default function TeacherAttendance() {
                 <Button
                   className="flex-1 rounded-xl h-12 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-900"
                   onClick={handleStartSession}
-                  disabled={initiateMutation.isPending}
+                  disabled={initiateMutation.isPending || isGettingLocation}
                 >
-                  {initiateMutation.isPending ? (
+                  {isGettingLocation ? (
+                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Getting GPS...</>
+                  ) : initiateMutation.isPending ? (
                     <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting...</>
                   ) : (
                     <><Sparkles className="mr-2 h-5 w-5" />Start Session</>
@@ -532,7 +629,16 @@ export default function TeacherAttendance() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-lg font-heading font-bold text-foreground">Live Session</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-heading font-bold text-foreground">Live Session</h1>
+                  <Badge className={`text-[10px] px-1.5 py-0 ${
+                    sessionClassMode === 'offline'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                  }`}>
+                    {sessionClassMode === 'offline' ? 'Offline' : 'Online'}
+                  </Badge>
+                </div>
                 <p className="text-xs text-muted-foreground">{sessionSubjectName} • {sessionClassName}</p>
               </div>
             </div>
@@ -540,7 +646,6 @@ export default function TeacherAttendance() {
               <Button variant="ghost" size="icon" onClick={() => refetch()} className="rounded-xl">
                 <RefreshCw className="h-4 w-4" />
               </Button>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -586,12 +691,13 @@ export default function TeacherAttendance() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className={`grid grid-cols-2 ${sessionClassMode === 'offline' ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4 mb-8`}>
           {[
             { label: 'Total', value: totalStudents, icon: Users, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-100 dark:bg-slate-800' },
             { label: 'Present', value: presentCount, icon: UserCheck, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/50' },
             { label: 'Pending', value: pendingCount, icon: Hourglass, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/50' },
             { label: 'Absent', value: absentCount, icon: UserX, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/50' },
+            ...(sessionClassMode === 'offline' ? [{ label: 'Proxy', value: proxyCount, icon: ShieldAlert, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/50' }] : []),
           ].map((stat, i) => (
             <div key={stat.label} className={`stat-card animate-in opacity-0 stagger-${i + 1}`}>
               <div className="flex items-start justify-between">
@@ -637,11 +743,12 @@ export default function TeacherAttendance() {
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
                 {students.map((student: AttendanceRecord, index: number) => {
-                  const isPending = !student.submitted_at
+                  const isPending = !student.submitted_at && student.status !== 'X'
                   const isPresent = student.status === 'P'
+                  const isProxy = student.status === 'X'
 
                   return (
-                    <tr key={student.student_email} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                    <tr key={student.student_email} className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${isProxy ? 'bg-purple-50/50 dark:bg-purple-950/20' : ''}`}>
                       <td className="py-4 px-6 text-sm text-muted-foreground font-medium">{index + 1}</td>
                       <td className="py-4 px-6">
                         <p className="font-medium text-foreground">{student.student_name}</p>
@@ -652,6 +759,10 @@ export default function TeacherAttendance() {
                         {isPending ? (
                           <Badge className="status-pending border">
                             <Clock className="h-3 w-3 mr-1" />Pending
+                          </Badge>
+                        ) : isProxy ? (
+                          <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                            <ShieldAlert className="h-3 w-3 mr-1" />Proxy
                           </Badge>
                         ) : isPresent ? (
                           <Badge className="status-present border">
@@ -716,6 +827,12 @@ export default function TeacherAttendance() {
                 <div className="flex justify-between items-center p-4 rounded-xl status-pending border">
                   <span>Pending → Absent</span>
                   <span className="font-heading font-bold text-xl">{pendingCount}</span>
+                </div>
+              )}
+              {proxyCount > 0 && (
+                <div className="flex justify-between items-center p-4 rounded-xl bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                  <span>Proxy → Absent</span>
+                  <span className="font-heading font-bold text-xl">{proxyCount}</span>
                 </div>
               )}
             </div>

@@ -16,7 +16,6 @@ import {
   Clock,
   Tag,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 type TabType = 'announcements' | 'notes'
 
@@ -230,16 +229,14 @@ export default function TeacherAnnouncements() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                className="rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-900"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowCreateModal(true)}
+              className="rounded-xl"
+            >
+              <Plus className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </header>

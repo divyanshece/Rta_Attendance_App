@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rta</string>
+    <string name="title_activity_main">Rta</string>
+    <string name="package_name">com.ehazira.app</string>
+    <string name="custom_url_scheme">com.ehazira.app</string>
+    <string name="server_client_id">1039107164512-dq4up6d2u7ke29seehpcmroet0od7a4g.apps.googleusercontent.com</string>
+</resources>

@@ -12,7 +12,6 @@ import {
   Check,
   CheckCheck,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface StudentAnnouncement {
   announcement_id: number
@@ -101,7 +100,6 @@ export default function StudentAnnouncements() {
               </div>
             </div>
 
-            <ThemeToggle />
           </div>
         </div>
       </header>

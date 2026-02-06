@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { getAuth, initializeAuth, browserLocalPersistence, GoogleAuthProvider, type Auth } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,7 +11,27 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-export const auth = getAuth(app)
+
+// On native (Capacitor WKWebView), IndexedDB can hang silently, so use
+// initializeAuth with browserLocalPersistence. On web, use getAuth which
+// includes the popup/redirect resolver needed by signInWithPopup.
+const isNative = typeof window !== 'undefined' &&
+  (window as any).Capacitor?.isNativePlatform?.()
+
+let auth: Auth
+if (isNative) {
+  try {
+    auth = initializeAuth(app, {
+      persistence: browserLocalPersistence
+    })
+  } catch {
+    auth = getAuth(app)
+  }
+} else {
+  auth = getAuth(app)
+}
+
+export { auth }
 export const googleProvider = new GoogleAuthProvider()
 
 // Force account selection every time

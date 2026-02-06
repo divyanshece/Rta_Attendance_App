@@ -22,7 +22,6 @@ import {
   Crown,
   UserPlus2,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import toast from 'react-hot-toast'
 
 interface ClassDetail {
@@ -124,7 +123,6 @@ export default function TeacherClasses() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <ThemeToggle />
               <Button
                 onClick={() => setShowCreateModal(true)}
                 className="rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-900 shadow-lg h-9 sm:h-10 px-3 sm:px-4"

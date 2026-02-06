@@ -25,8 +25,8 @@ const forceLogout = (message?: string) => {
   localStorage.removeItem('auth-storage') // Zustand persisted state
 
   if (message) {
-    // Store message for login page to display
-    sessionStorage.setItem('auth_message', message)
+    // Store message for login page to display (use localStorage so it survives page reload on mobile)
+    localStorage.setItem('auth_message', message)
   }
 
   // Use replace to prevent back button issues
@@ -101,7 +101,7 @@ interface AuthResponse {
   user_info: {
     email: string
     name: string
-    user_type?: string
+    user_type: 'teacher' | 'student' | 'admin'
     designation?: string
     department?: string
     roll_no?: string
@@ -112,8 +112,13 @@ interface AuthResponse {
 }
 
 interface InitiateAttendanceRequest {
-  period_id: number
+  period_id?: number
+  subject_id?: number
   date: string
+  class_mode?: 'offline' | 'online'
+  teacher_latitude?: number
+  teacher_longitude?: number
+  proximity_radius?: number
 }
 
 interface InitiateAttendanceResponse {
@@ -124,13 +129,14 @@ interface InitiateAttendanceResponse {
   total_students: number
   class_name?: string
   subject_name?: string
+  class_mode?: 'offline' | 'online'
 }
 
 interface AttendanceRecord {
   student_email: string
   student_name: string
   roll_no: string
-  status: 'P' | 'A'
+  status: 'P' | 'A' | 'X'
   status_display: string
   submitted_at: string | null
 }
@@ -141,6 +147,8 @@ interface LiveStatusResponse {
   present: number
   absent: number
   pending: number
+  proxy: number
+  class_mode?: 'offline' | 'online'
   submissions: AttendanceRecord[]
 }
 
@@ -199,7 +207,15 @@ export const attendanceAPI = {
     return response.data
   },
 
-  initiate: async (data: { subject_id?: number; period_id?: number; date: string }): Promise<InitiateAttendanceResponse> => {
+  initiate: async (data: {
+    subject_id?: number;
+    period_id?: number;
+    date: string;
+    class_mode?: 'offline' | 'online';
+    teacher_latitude?: number;
+    teacher_longitude?: number;
+    proximity_radius?: number;
+  }): Promise<InitiateAttendanceResponse> => {
     const response = await api.post<InitiateAttendanceResponse>('/attendance/initiate', data)
     return response.data
   },
@@ -708,6 +724,81 @@ interface ExportData {
     total_absent: number
     overall_percentage: number
   }[]
+}
+
+// Export Register Types
+interface ExportMonthInfo {
+  month: number
+  year: number
+  month_name: string
+  total_sessions: number
+}
+
+interface ExportRegisterMeta {
+  subject_name: string
+  class_name: string
+  department: string
+  batch: number
+  semester: number
+  section: string
+  teacher_name: string
+}
+
+interface ExportRegisterMonthsResponse extends ExportRegisterMeta {
+  months: ExportMonthInfo[]
+}
+
+interface ExportRegisterMonthlyResponse extends ExportRegisterMeta {
+  month: number
+  year: number
+  month_name: string
+  sessions: { date: string; day: string }[]
+  students: {
+    roll_no: string
+    name: string
+    email: string
+    attendance: number[]
+    total_present: number
+    total_classes: number
+    percentage: number
+  }[]
+}
+
+interface ExportRegisterSemesterResponse extends ExportRegisterMeta {
+  months: ExportMonthInfo[]
+  students: {
+    roll_no: string
+    name: string
+    email: string
+    monthly_stats: { present: number; total: number; percentage: number }[]
+    total_present: number
+    total_classes: number
+    percentage: number
+  }[]
+}
+
+// Export Register API
+export const exportRegisterAPI = {
+  getMonths: async (subjectId: number): Promise<ExportRegisterMonthsResponse> => {
+    const response = await api.get<ExportRegisterMonthsResponse>(`/subjects/${subjectId}/export-register/`, {
+      params: { mode: 'months' },
+    })
+    return response.data
+  },
+
+  getMonthly: async (subjectId: number, month: number, year: number): Promise<ExportRegisterMonthlyResponse> => {
+    const response = await api.get<ExportRegisterMonthlyResponse>(`/subjects/${subjectId}/export-register/`, {
+      params: { mode: 'monthly', month, year },
+    })
+    return response.data
+  },
+
+  getSemester: async (subjectId: number): Promise<ExportRegisterSemesterResponse> => {
+    const response = await api.get<ExportRegisterSemesterResponse>(`/subjects/${subjectId}/export-register/`, {
+      params: { mode: 'semester' },
+    })
+    return response.data
+  },
 }
 
 // Schedule/Period API

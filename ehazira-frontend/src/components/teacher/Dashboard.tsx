@@ -1,18 +1,16 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/auth'
-import { scheduleAPI, reportsAPI, adminAPI } from '@/services/api'
+import { scheduleAPI, adminAPI } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import {
   ClipboardList,
   Users,
   Calendar,
   Settings,
-  LogOut,
   BarChart3,
   ChevronRight,
   Clock,
-  BookOpen,
   Megaphone,
   Shield,
 } from 'lucide-react'
@@ -29,26 +27,13 @@ interface ScheduleItem {
   period_no: number
 }
 
-interface DashboardStats {
-  total_classes: number
-  total_students: number
-  total_subjects: number
-  todays_sessions: number
-  average_attendance: number
-}
-
 export default function TeacherDashboard() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
 
   const { data: todaySchedule = [], isLoading: isLoadingSchedule } = useQuery({
     queryKey: ['todaySchedule'],
     queryFn: scheduleAPI.getToday,
-  })
-
-  const { data: stats } = useQuery({
-    queryKey: ['dashboardStats'],
-    queryFn: reportsAPI.getDashboardStats,
   })
 
   const { data: adminCheck } = useQuery({
@@ -131,14 +116,6 @@ export default function TeacherDashboard() {
               >
                 <Settings className="h-5 w-5" />
               </Button>
-              <Button
-                variant="ghost"
-                onClick={logout}
-                className="rounded-xl text-muted-foreground hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
             </div>
           </div>
         </div>
@@ -159,35 +136,6 @@ export default function TeacherDashboard() {
               year: 'numeric',
             })}
           </p>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          {[
-            { label: 'Classes', value: stats?.total_classes || 0, icon: BookOpen, gradient: 'from-violet-500 to-purple-600' },
-            { label: 'Students', value: stats?.total_students || 0, icon: Users, gradient: 'from-blue-500 to-indigo-600' },
-            { label: 'Today\'s Classes', value: todaySchedule.length, icon: Calendar, gradient: 'from-amber-500 to-orange-600' },
-            { label: 'Subjects', value: stats?.total_subjects || 0, icon: ClipboardList, gradient: 'from-emerald-500 to-teal-600' },
-          ].map((stat, i) => (
-            <div
-              key={stat.label}
-              className={`stat-card animate-in opacity-0 stagger-${i + 1}`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                    {stat.label}
-                  </p>
-                  <p className="text-2xl md:text-3xl font-heading font-bold text-foreground">
-                    {stat.value}
-                  </p>
-                </div>
-                <div className={`p-2 rounded-lg bg-gradient-to-br ${stat.gradient} shadow-lg`}>
-                  <stat.icon className="h-4 w-4 text-white" />
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Quick Actions */}

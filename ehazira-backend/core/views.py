@@ -52,9 +52,17 @@ from .serializers import (
 )
 import csv
 import io
+import calendar
+from collections import defaultdict
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate('firebase-key.json')
+    firebase_key_json = os.getenv('FIREBASE_KEY_JSON', '')
+    if firebase_key_json:
+        import json
+        cred = credentials.Certificate(json.loads(firebase_key_json))
+    else:
+        firebase_key_path = os.getenv('FIREBASE_KEY_PATH', 'firebase-key.json')
+        cred = credentials.Certificate(firebase_key_path)
     firebase_admin.initialize_app(cred)
 
 def sanitize_group_name(email):
@@ -334,6 +342,12 @@ class InitiateAttendanceView(APIView):
         subject_id = request.data.get('subject_id')
         date_str = request.data.get('date', str(timezone.now().date()))
 
+        # GPS proximity fields
+        class_mode = request.data.get('class_mode', 'offline')
+        teacher_latitude = request.data.get('teacher_latitude')
+        teacher_longitude = request.data.get('teacher_longitude')
+        proximity_radius = request.data.get('proximity_radius', 30)
+
         if not period_id and not subject_id:
             return Response(
                 {'error': 'Either period_id or subject_id is required'},
@@ -416,7 +430,11 @@ class InitiateAttendanceView(APIView):
                 date=date_str,
                 otp=otp,
                 otp_generated_at=timezone.now(),
-                is_active=True
+                is_active=True,
+                class_mode=class_mode if class_mode in ('offline', 'online') else 'offline',
+                teacher_latitude=teacher_latitude if class_mode == 'offline' else None,
+                teacher_longitude=teacher_longitude if class_mode == 'offline' else None,
+                proximity_radius=int(proximity_radius) if proximity_radius else 30,
             )
 
             # Get all students in this class (from both class_field AND StudentClass enrollments)
@@ -480,6 +498,7 @@ class InitiateAttendanceView(APIView):
                 'total_students': len(student_emails),
                 'class_name': str(subject.class_field),
                 'subject_name': subject.course.course_name,
+                'class_mode': session.class_mode,
             }, status=status.HTTP_201_CREATED)
 
         except Teacher.DoesNotExist:
@@ -541,6 +560,12 @@ class CloseAttendanceView(APIView):
                 status='A',
                 submitted_at=timezone.now()
             )
+
+            # Mark all Proxy students as Absent (proxy = out of GPS range)
+            Attendance.objects.filter(
+                session=session,
+                status='X'
+            ).update(status='A')
 
             # Close session
             session.is_active = False
@@ -683,6 +708,7 @@ class LiveStatusView(APIView):
 
             total = attendances.count()
             present = attendances.filter(status='P').count()
+            proxy = attendances.filter(status='X').count()
 
             # If session is active, differentiate between pending and absent
             if session.is_active:
@@ -704,12 +730,13 @@ class LiveStatusView(APIView):
             for att in attendances:
                 # Prefer roll_no from enrollment, fallback to student's default
                 roll_no = enrollment_roll_nos.get(att.student.student_email, att.student.roll_no)
+                status_display_map = {'P': 'Present', 'A': 'Absent', 'X': 'Proxy', 'R': 'Retry'}
                 submissions.append({
                     'student_email': att.student.student_email,
                     'student_name': att.student.name,
                     'roll_no': roll_no,
                     'status': att.status,
-                    'status_display': 'Present' if att.status == 'P' else 'Absent',
+                    'status_display': status_display_map.get(att.status, 'Absent'),
                     'submitted_at': att.submitted_at.isoformat() if att.submitted_at else None
                 })
 
@@ -719,6 +746,8 @@ class LiveStatusView(APIView):
                 'present': present,
                 'absent': absent,
                 'pending': pending,
+                'proxy': proxy,
+                'class_mode': session.class_mode,
                 'submissions': submissions
             }, status=status.HTTP_200_OK)
 
@@ -3752,3 +3781,225 @@ class AdminToggleView(APIView):
                 added_by=Teacher.objects.filter(teacher_email=str(request.user)).first()
             )
             return Response({'message': 'Admin status granted', 'is_admin': True})
+
+
+class ExportSubjectAttendanceView(APIView):
+    """Export attendance register for a subject — supports months listing, monthly date-wise, and semester summary."""
+    permission_classes = [IsJWTAuthenticated]
+
+    def get(self, request, pk):
+        if request.user_type != 'teacher':
+            return Response({'error': 'Teachers only'}, status=status.HTTP_403_FORBIDDEN)
+
+        teacher_email = str(request.user)
+        mode = request.query_params.get('mode', 'months')
+
+        try:
+            subject = Subject.objects.select_related('course', 'class_field', 'class_field__department', 'teacher').get(subject_id=pk)
+        except Subject.DoesNotExist:
+            return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Verify access: teacher owns the subject or is coordinator
+        is_owner = subject.teacher.teacher_email == teacher_email
+        is_coordinator = (
+            subject.class_field.coordinator and
+            subject.class_field.coordinator.teacher_email == teacher_email
+        )
+        if not is_owner and not is_coordinator:
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get all closed sessions for this subject, ordered by date
+        all_sessions = Session.objects.filter(
+            period__subject=subject,
+            is_active=False,
+        ).order_by('date', 'session_id')
+
+        # Get all enrolled students
+        enrollments = StudentClass.objects.filter(class_obj=subject.class_field).select_related('student')
+        students_list = sorted(enrollments, key=lambda e: e.roll_no)
+
+        # Common metadata
+        meta = {
+            'subject_name': subject.course.course_name,
+            'class_name': str(subject.class_field),
+            'department': subject.class_field.department.department_name,
+            'batch': subject.class_field.batch,
+            'semester': subject.class_field.semester,
+            'section': subject.class_field.section,
+            'teacher_name': subject.teacher.name,
+        }
+
+        if mode == 'months':
+            return self._handle_months(all_sessions, meta)
+        elif mode == 'monthly':
+            month = request.query_params.get('month')
+            year = request.query_params.get('year')
+            if not month or not year:
+                return Response({'error': 'month and year required for monthly mode'}, status=status.HTTP_400_BAD_REQUEST)
+            return self._handle_monthly(all_sessions, students_list, meta, int(month), int(year))
+        elif mode == 'semester':
+            return self._handle_semester(all_sessions, students_list, meta)
+        else:
+            return Response({'error': 'Invalid mode. Use: months, monthly, or semester'}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _handle_months(self, all_sessions, meta):
+        """Return list of months that have session data."""
+        months_map = defaultdict(int)
+        for session in all_sessions:
+            key = (session.date.year, session.date.month)
+            months_map[key] += 1
+
+        months = []
+        for (year, month), count in sorted(months_map.items()):
+            months.append({
+                'month': month,
+                'year': year,
+                'month_name': calendar.month_name[month],
+                'total_sessions': count,
+            })
+
+        return Response({**meta, 'months': months})
+
+    def _handle_monthly(self, all_sessions, students_list, meta, month, year):
+        """Return date-wise attendance register for a specific month."""
+        month_sessions = [s for s in all_sessions if s.date.month == month and s.date.year == year]
+
+        if not month_sessions:
+            return Response({
+                **meta,
+                'month': month,
+                'year': year,
+                'month_name': calendar.month_name[month],
+                'sessions': [],
+                'students': [],
+            })
+
+        session_ids = [s.session_id for s in month_sessions]
+        sessions_info = []
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        for s in month_sessions:
+            sessions_info.append({
+                'date': s.date.isoformat(),
+                'day': day_names[s.date.weekday()],
+            })
+
+        # Batch-fetch all attendance records for these sessions
+        attendance_records = Attendance.objects.filter(
+            session_id__in=session_ids
+        ).values_list('session_id', 'student_id', 'status')
+
+        # Build lookup: (session_id, student_email) -> status
+        att_lookup = {}
+        for sid, student_email, att_status in attendance_records:
+            att_lookup[(sid, student_email)] = att_status
+
+        students_data = []
+        for enrollment in students_list:
+            student = enrollment.student
+            attendance = []
+            total_present = 0
+            for s in month_sessions:
+                st = att_lookup.get((s.session_id, student.student_email))
+                present = 1 if st == 'P' else 0
+                attendance.append(present)
+                total_present += present
+
+            total_classes = len(month_sessions)
+            students_data.append({
+                'roll_no': enrollment.roll_no,
+                'name': student.name,
+                'email': student.student_email,
+                'attendance': attendance,
+                'total_present': total_present,
+                'total_classes': total_classes,
+                'percentage': round((total_present / total_classes * 100), 2) if total_classes > 0 else 0,
+            })
+
+        return Response({
+            **meta,
+            'month': month,
+            'year': year,
+            'month_name': calendar.month_name[month],
+            'sessions': sessions_info,
+            'students': students_data,
+        })
+
+    def _handle_semester(self, all_sessions, students_list, meta):
+        """Return month-wise summary for the full semester."""
+        # Group sessions by month
+        months_sessions = defaultdict(list)
+        for s in all_sessions:
+            months_sessions[(s.date.year, s.date.month)].append(s)
+
+        sorted_months = sorted(months_sessions.keys())
+
+        if not sorted_months:
+            return Response({**meta, 'months': [], 'students': []})
+
+        months_info = []
+        for (year, month) in sorted_months:
+            months_info.append({
+                'month': month,
+                'year': year,
+                'month_name': calendar.month_name[month],
+                'total_sessions': len(months_sessions[(year, month)]),
+            })
+
+        # Batch-fetch all attendance records for all sessions
+        all_session_ids = [s.session_id for s in all_sessions]
+        attendance_records = Attendance.objects.filter(
+            session_id__in=all_session_ids
+        ).values_list('session_id', 'student_id', 'status')
+
+        # Build lookup: (session_id, student_email) -> status
+        att_lookup = {}
+        for sid, student_email, att_status in attendance_records:
+            att_lookup[(sid, student_email)] = att_status
+
+        # Map session_id -> (year, month)
+        session_month_map = {}
+        for s in all_sessions:
+            session_month_map[s.session_id] = (s.date.year, s.date.month)
+
+        students_data = []
+        for enrollment in students_list:
+            student = enrollment.student
+            monthly_present = defaultdict(int)
+            monthly_total = defaultdict(int)
+
+            for s in all_sessions:
+                ym = session_month_map[s.session_id]
+                st = att_lookup.get((s.session_id, student.student_email))
+                monthly_total[ym] += 1
+                if st == 'P':
+                    monthly_present[ym] += 1
+
+            monthly_stats = []
+            total_present = 0
+            total_classes = 0
+            for ym in sorted_months:
+                p = monthly_present[ym]
+                t = monthly_total[ym]
+                total_present += p
+                total_classes += t
+                monthly_stats.append({
+                    'present': p,
+                    'total': t,
+                    'percentage': round((p / t * 100), 2) if t > 0 else 0,
+                })
+
+            students_data.append({
+                'roll_no': enrollment.roll_no,
+                'name': student.name,
+                'email': student.student_email,
+                'monthly_stats': monthly_stats,
+                'total_present': total_present,
+                'total_classes': total_classes,
+                'percentage': round((total_present / total_classes * 100), 2) if total_classes > 0 else 0,
+            })
+
+        return Response({
+            **meta,
+            'months': months_info,
+            'students': students_data,
+        })

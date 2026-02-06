@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminAPI, AdminTeacher, AdminDepartment } from '@/services/api'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
 import {
   ArrowLeft,
@@ -20,13 +21,13 @@ import {
   Loader2,
   Search,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AppLogo } from '@/components/ui/AppLogo'
 import toast from 'react-hot-toast'
 
 export default function AdminPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
   const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'departments'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -180,7 +181,6 @@ export default function AdminPage() {
                 <Shield className="h-3 w-3 mr-1" />
                 Admin
               </Badge>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -391,8 +391,8 @@ export default function AdminPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          if (confirm(`Remove ${teacher.name} from the organization?`)) {
+                        onClick={async () => {
+                          if (await confirm('Remove Teacher', `Remove ${teacher.name} from the organization?`, { confirmLabel: 'Remove' })) {
                             deleteTeacherMutation.mutate(teacher.email)
                           }
                         }}
@@ -456,8 +456,8 @@ export default function AdminPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
-                        if (confirm(`Delete ${dept.department_name}?`)) {
+                      onClick={async () => {
+                        if (await confirm('Delete Department', `Delete ${dept.department_name}?`, { confirmLabel: 'Delete' })) {
                           deleteDeptMutation.mutate(dept.department_id)
                         }
                       }}
@@ -649,6 +649,7 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      {ConfirmDialog}
     </div>
   )
 }

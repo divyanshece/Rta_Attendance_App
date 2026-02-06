@@ -16,7 +16,6 @@ import {
   Calendar,
   BarChart3,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface SubjectAttendance {
   subject_id: number
@@ -110,7 +109,6 @@ export default function StudentClassDetail() {
                 </Button>
                 <h1 className="text-lg font-heading font-bold text-foreground">Class Not Found</h1>
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </header>
@@ -158,7 +156,6 @@ export default function StudentClassDetail() {
                 <p className="text-xs text-muted-foreground">{classData.department_name}</p>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </header>

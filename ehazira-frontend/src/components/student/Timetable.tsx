@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AppLogoIcon } from '@/components/ui/AppLogo'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -146,7 +145,6 @@ export default function StudentTimetable() {
               </div>
             </div>
 
-            <ThemeToggle />
           </div>
         </div>
       </header>

@@ -23,7 +23,7 @@ export interface GoogleAuthRequest {
   id_token: string;
   device_uuid: string;
   fingerprint_hash: string;
-  platform: 'ANDROID' | 'IOS';
+  platform: 'ANDROID' | 'IOS' | 'WEB';
   user_type?: UserType;
   name?: string;
   designation?: string;

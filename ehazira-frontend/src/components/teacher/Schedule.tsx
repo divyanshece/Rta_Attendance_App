@@ -4,8 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { scheduleAPI, timeSlotsAPI } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Plus, X, Clock, Trash2 } from 'lucide-react'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import toast from 'react-hot-toast'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -39,6 +39,7 @@ interface TimeSlot {
 export default function TeacherSchedule() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { confirm, ConfirmDialog } = useConfirm()
 
   // Modal states
   const [addingToDay, setAddingToDay] = useState<number | null>(null)
@@ -144,8 +145,8 @@ export default function TeacherSchedule() {
     })
   }
 
-  const handleDeletePeriod = (periodId: number) => {
-    if (confirm('Remove this period?')) {
+  const handleDeletePeriod = async (periodId: number) => {
+    if (await confirm('Remove Period', 'Remove this period from the schedule?', { confirmLabel: 'Remove' })) {
       deletePeriodMutation.mutate(periodId)
     }
   }
@@ -206,7 +207,6 @@ export default function TeacherSchedule() {
                 <Clock className="h-4 w-4 mr-2" />
                 Set Times
               </Button>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -493,6 +493,7 @@ export default function TeacherSchedule() {
           </div>
         </div>
       )}
+      {ConfirmDialog}
     </div>
   )
 }

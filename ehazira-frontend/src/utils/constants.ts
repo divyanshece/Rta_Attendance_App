@@ -31,32 +31,6 @@ export const ROUTES = {
   STUDENT_HISTORY: '/student/history',
 } as const;
 
-export const DEVICE_UUID_KEY = 'device_uuid';
-export const FINGERPRINT_KEY = 'device_fingerprint';
-
-export const generateDeviceUUID = (): string => {
-  let uuid = localStorage.getItem(DEVICE_UUID_KEY);
-  if (!uuid) {
-    uuid = crypto.randomUUID();
-    localStorage.setItem(DEVICE_UUID_KEY, uuid);
-  }
-  return uuid;
-};
-
-export const generateDeviceFingerprint = (): string => {
-  let fingerprint = localStorage.getItem(FINGERPRINT_KEY);
-  if (!fingerprint) {
-    const data = [
-      navigator.userAgent,
-      navigator.language,
-      new Date().getTimezoneOffset(),
-      screen.width,
-      screen.height,
-      screen.colorDepth,
-    ].join('|');
-    
-    fingerprint = btoa(data).substring(0, 64);
-    localStorage.setItem(FINGERPRINT_KEY, fingerprint);
-  }
-  return fingerprint;
-};
+// Device UUID and fingerprint functions moved to @/utils/native.ts
+// Re-export for backward compatibility
+export { getDeviceUUID as generateDeviceUUID, getDeviceFingerprint as generateDeviceFingerprint } from '@/utils/native';
