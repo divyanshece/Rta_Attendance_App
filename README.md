@@ -1,4 +1,4 @@
-# eHazira Frontend
+# Real Time Attendance(Rta) Frontend
 
 A cross-platform attendance management application built with React, TypeScript, and Capacitor for web, Android, and iOS.
 
@@ -17,7 +17,7 @@ A cross-platform attendance management application built with React, TypeScript,
 
 ## Overview
 
-eHazira is a mobile-first attendance application designed for educational institutions. The frontend provides interfaces for:
+Rta is a mobile-first attendance application designed for educational institutions. The frontend provides interfaces for:
 
 - Teachers: Manage classes, take attendance, view reports
 - Students: Mark attendance, view schedule, track attendance percentage
