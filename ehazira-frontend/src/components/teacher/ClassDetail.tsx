@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classAPI, scheduleAPI, studentLookupAPI, subjectAPI, exportRegisterAPI } from '@/services/api'
+import { classAPI, scheduleAPI, studentLookupAPI, subjectAPI, exportRegisterAPI, authAPI } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -26,6 +26,7 @@ import {
   Crown,
   Calendar,
   FileDown,
+  Smartphone,
 } from 'lucide-react'
 import { TeacherManagementModal } from './Classes'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -186,6 +187,16 @@ export default function ClassDetailPage() {
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || 'Failed to remove student')
+    },
+  })
+
+  const resetDeviceMutation = useMutation({
+    mutationFn: (email: string) => authAPI.resetStudentDevice(email),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Device reset successful')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to reset device')
     },
   })
 
@@ -678,20 +689,37 @@ export default function ClassDetailPage() {
                         <p className="text-[10px] sm:text-xs text-muted-foreground">Roll: {student.roll_no}</p>
                       </div>
                     </div>
-                    {classInfo?.is_coordinator && (
+                    <div className="flex items-center gap-1">
+                      {/* Reset Device Button */}
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={async () => {
-                          if (await confirm('Remove Student', `Remove ${student.student_name} from this class?`, { confirmLabel: 'Remove' })) {
-                            removeStudentMutation.mutate(student.student_email)
+                          if (await confirm('Reset Device', `Reset device for ${student.student_name}? This will allow them to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
+                            resetDeviceMutation.mutate(student.student_email)
                           }
                         }}
-                        className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
+                        className="rounded-xl text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
+                        title="Reset student's device"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Smartphone className="h-4 w-4" />
                       </Button>
-                    )}
+                      {/* Remove Student Button - Coordinator only */}
+                      {classInfo?.is_coordinator && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={async () => {
+                            if (await confirm('Remove Student', `Remove ${student.student_name} from this class?`, { confirmLabel: 'Remove' })) {
+                              removeStudentMutation.mutate(student.student_email)
+                            }
+                          }}
+                          className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

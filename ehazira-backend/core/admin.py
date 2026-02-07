@@ -2,7 +2,10 @@
 from django.contrib import admin
 from .models import (
     Department, Teacher, Student, Class, Course,
-    Subject, Period, Session, Attendance, Device
+    Subject, Period, Session, Attendance, Device,
+    Organization, OrganizationAdmin as OrgAdmin, StudentClass,
+    ClassTeacher, StudentInvitation, Announcement, TeacherNote,
+    PeriodTimeSlot, SubjectEnrollment
 )
 
 
@@ -102,3 +105,73 @@ class DeviceAdmin(admin.ModelAdmin):
     def deactivate_devices(self, request, queryset):
         queryset.update(active=False)
     deactivate_devices.short_description = "Deactivate selected devices"
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ['organization_id', 'name', 'code', 'address', 'created_at']
+    search_fields = ['name', 'code']
+    readonly_fields = ['created_at']
+
+
+@admin.register(OrgAdmin)
+class OrgAdminAdmin(admin.ModelAdmin):
+    list_display = ['id', 'organization', 'teacher', 'added_at', 'added_by']
+    list_filter = ['organization']
+    search_fields = ['teacher__name', 'teacher__teacher_email']
+    readonly_fields = ['added_at']
+
+
+@admin.register(StudentClass)
+class StudentClassAdmin(admin.ModelAdmin):
+    list_display = ['id', 'student', 'class_obj', 'roll_no', 'enrolled_at']
+    list_filter = ['class_obj']
+    search_fields = ['student__name', 'student__student_email', 'roll_no']
+    readonly_fields = ['enrolled_at']
+
+
+@admin.register(ClassTeacher)
+class ClassTeacherAdmin(admin.ModelAdmin):
+    list_display = ['id', 'class_obj', 'teacher', 'added_by', 'added_at']
+    list_filter = ['class_obj']
+    search_fields = ['teacher__name', 'teacher__teacher_email']
+    readonly_fields = ['added_at']
+
+
+@admin.register(StudentInvitation)
+class StudentInvitationAdmin(admin.ModelAdmin):
+    list_display = ['invitation_id', 'class_obj', 'email', 'name', 'roll_no', 'accepted', 'invited_at']
+    list_filter = ['accepted', 'class_obj']
+    search_fields = ['email', 'name', 'roll_no']
+    readonly_fields = ['invited_at', 'accepted_at']
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ['announcement_id', 'title', 'class_obj', 'subject', 'teacher', 'created_at']
+    list_filter = ['class_obj', 'teacher']
+    search_fields = ['title', 'content']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(TeacherNote)
+class TeacherNoteAdmin(admin.ModelAdmin):
+    list_display = ['note_id', 'class_obj', 'subject', 'teacher', 'created_at']
+    list_filter = ['class_obj', 'teacher']
+    search_fields = ['content']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(PeriodTimeSlot)
+class PeriodTimeSlotAdmin(admin.ModelAdmin):
+    list_display = ['slot_id', 'teacher', 'period_no', 'start_time', 'end_time']
+    list_filter = ['teacher', 'period_no']
+    search_fields = ['teacher__name']
+
+
+@admin.register(SubjectEnrollment)
+class SubjectEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ['enrollment_id', 'subject', 'student', 'enrolled_at', 'enrolled_by']
+    list_filter = ['subject']
+    search_fields = ['student__name', 'student__student_email']
+    readonly_fields = ['enrolled_at']

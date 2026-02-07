@@ -5,6 +5,9 @@ from .views import (
     PendingUsersView,
     VerifyUserView,
     ApproveDeviceView,
+    StudentLogoutView,
+    ResetStudentDeviceView,
+    StudentDeviceInfoView,
     InitiateAttendanceView,
     CloseAttendanceView,
     RegenerateOTPView,
@@ -72,6 +75,11 @@ urlpatterns = [
     path('auth/admin/pending-users', PendingUsersView.as_view(), name='pending-users'),
     path('auth/admin/verify-user', VerifyUserView.as_view(), name='verify-user'),
     path('devices/approve', ApproveDeviceView.as_view(), name='approve-device'),
+
+    # Student Device Management
+    path('auth/logout', StudentLogoutView.as_view(), name='student-logout'),
+    path('devices/reset', ResetStudentDeviceView.as_view(), name='reset-student-device'),
+    path('devices/info/<str:email>/', StudentDeviceInfoView.as_view(), name='student-device-info'),
 
     # Teacher APIs - Attendance Management
     path('attendance/initiate', InitiateAttendanceView.as_view(), name='initiate-attendance'),

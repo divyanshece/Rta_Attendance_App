@@ -71,35 +71,48 @@ class JWTAuthenticationMiddleware:
             request.user = JWTEmailUser(payload['email'])
             request.user_type = payload['user_type']
 
-            # Additional validation for students only
+            # STRICT device validation for students
             if request.user_type == 'student':
                 device_id = payload.get('device_id')
-                if device_id:
-                    # Skip device check for web development (device_id=1 is hardcoded for web)
-                    # In production, real device IDs from mobile app will be validated
-                    if device_id == 1:
-                        # Web development mode - skip device validation
-                        request.device_id = device_id
-                    else:
-                        # Mobile app - verify device is still active
-                        is_active = Device.objects.filter(
-                            device_id=device_id,
-                            user_email=payload['email'],
-                            active=True,
-                        ).exists()
 
-                        if not is_active:
-                            return JsonResponse(
-                                {
-                                    'error': 'Device not approved or has been revoked',
-                                    'user_type': request.user_type,
-                                    'email': payload['email'],
-                                    'hint': 'If you are a teacher, you may be using a student token. Please logout and login again.'
-                                },
-                                status=403
-                            )
-                        request.device_id = device_id
-                # If no device_id in token, allow access (for web/development)
+                # Students MUST have a valid device_id
+                if not device_id:
+                    return JsonResponse(
+                        {
+                            'error': 'Invalid session - please login again',
+                            'code': 'NO_DEVICE_ID',
+                            'message': 'Your session is invalid. Please logout and login again from the mobile app.'
+                        },
+                        status=401
+                    )
+
+                # Verify device is still active
+                device = Device.objects.filter(
+                    device_id=device_id,
+                    user_email=payload['email'],
+                ).first()
+
+                if not device:
+                    return JsonResponse(
+                        {
+                            'error': 'Device not found',
+                            'code': 'DEVICE_NOT_FOUND',
+                            'message': 'Your device is not registered. Please logout and login again.'
+                        },
+                        status=403
+                    )
+
+                if not device.active:
+                    return JsonResponse(
+                        {
+                            'error': 'Device has been deactivated',
+                            'code': 'DEVICE_INACTIVE',
+                            'message': 'Your device has been deactivated. This may happen if you logged in from another device. Please contact your teacher to reset your device.'
+                        },
+                        status=403
+                    )
+
+                request.device_id = device_id
             
         except jwt.ExpiredSignatureError:
             return JsonResponse(

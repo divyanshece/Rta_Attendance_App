@@ -33,6 +33,11 @@ export default function TeacherSettings() {
   const queryClient = useQueryClient()
   const { user, logout } = useAuthStore()
 
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
+
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
@@ -339,7 +344,7 @@ export default function TeacherSettings() {
               <Button
                 variant="outline"
                 className="w-full rounded-xl h-12 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
-                onClick={logout}
+                onClick={handleLogout}
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout

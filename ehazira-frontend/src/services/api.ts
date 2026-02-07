@@ -185,6 +185,27 @@ export const authAPI = {
     })
     return response.data
   },
+
+  // Student logout - deactivates device on server
+  logout: async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Ignore errors - we'll clear local state anyway
+    }
+  },
+
+  // Teacher: Reset a student's device
+  resetStudentDevice: async (studentEmail: string): Promise<{ message: string; devices_removed: number }> => {
+    const response = await api.post('/devices/reset', { student_email: studentEmail })
+    return response.data
+  },
+
+  // Teacher: Get student device info
+  getStudentDevices: async (email: string): Promise<{ student_email: string; devices: Array<{ device_id: number; platform: string; active: boolean; registered_at: string; last_login: string }> }> => {
+    const response = await api.get(`/devices/info/${email}/`)
+    return response.data
+  },
 }
 
 // Classes for attendance type
