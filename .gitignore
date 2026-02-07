@@ -72,3 +72,7 @@ coverage.xml
 *.bak
 *.tmp
 *.temp
+
+
+DOCUMENTATION.md
+ehazira-backend/
