@@ -21,6 +21,7 @@ import TeacherAnnouncements from './components/teacher/Announcements'
 import StudentAnnouncements from './components/student/Announcements'
 import TeacherAdmin from './components/teacher/Admin'
 import Onboarding, { hasCompletedOnboarding } from './components/Onboarding'
+import SplashScreen from './components/SplashScreen'
 
 function ProtectedRoute({
   children,
@@ -89,6 +90,7 @@ function App() {
   const navigate = useNavigate()
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
+  const [showSplash, setShowSplash] = useState(true)
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -178,6 +180,29 @@ function App() {
     setupBackButton()
     return () => cleanup?.()
   }, [])
+
+  // Hide native splash screen when React app is ready
+  useEffect(() => {
+    async function hideNativeSplash() {
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+        if (!Capacitor.isNativePlatform()) return
+
+        const { SplashScreen } = await import('@capacitor/splash-screen')
+        // Hide native splash immediately, our React splash takes over
+        await SplashScreen.hide()
+      } catch {
+        // Not on native platform or plugin not available
+      }
+    }
+
+    hideNativeSplash()
+  }, [])
+
+  // Show splash screen first
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} minDuration={2000} />
+  }
 
   if (showOnboarding) {
     return <Onboarding onComplete={() => setShowOnboarding(false)} />
