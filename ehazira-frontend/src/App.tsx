@@ -87,7 +87,6 @@ function App() {
   const { isAuthenticated, user } = useAuthStore()
   const { theme } = useThemeStore()
   const navigate = useNavigate()
-  const location = useLocation()
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
 
@@ -97,6 +96,33 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark')
     }
+
+    // Configure status bar for mobile apps
+    async function configureStatusBar() {
+      try {
+        const { Capacitor } = await import('@capacitor/core')
+        if (!Capacitor.isNativePlatform()) return
+
+        const { StatusBar, Style } = await import('@capacitor/status-bar')
+
+        // In light mode: dark icons (visible on white background)
+        // In dark mode: light icons (visible on dark background)
+        await StatusBar.setStyle({
+          style: theme === 'dark' ? Style.Dark : Style.Light
+        })
+
+        // Set background color to match the app header
+        if (Capacitor.getPlatform() === 'android') {
+          await StatusBar.setBackgroundColor({
+            color: theme === 'dark' ? '#0f172a' : '#ffffff'
+          })
+        }
+      } catch {
+        // StatusBar not available (web or plugin not installed)
+      }
+    }
+
+    configureStatusBar()
   }, [theme])
 
   useEffect(() => {
