@@ -1,95 +1,111 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { websocketService } from '@/services/websocket'
+import { studentAPI } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2, CheckCircle2, Clock, XCircle, MapPin, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2, XCircle, MapPin, ShieldAlert } from 'lucide-react'
 import { getCurrentPosition } from '@/utils/native'
 
 export default function StudentAttendance() {
   const navigate = useNavigate()
   const { accessToken, user } = useAuthStore()
-  console.log('👤 STUDENT USER:', user)
-  console.log('📧 STUDENT EMAIL:', user?.email)
   const [sessionId, setSessionId] = useState<number | null>(null)
-  const [otp, setOtp] = useState(['', '', '', '']) // 4 DIGITS
+  const [otp, setOtp] = useState(['', '', '', ''])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [attendanceMarked, setAttendanceMarked] = useState(false)
-  const [retryCount, setRetryCount] = useState(0) // RETRY COUNTER
-  const [isBlocked, setIsBlocked] = useState(false) // BLOCKED AFTER 3 ATTEMPTS
+  const [retryCount, setRetryCount] = useState(0)
+  const [isBlocked, setIsBlocked] = useState(false)
   const [studentLocation, setStudentLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationStatus, setLocationStatus] = useState<'pending' | 'acquired' | 'denied' | 'error'>('pending')
   const [isProxy, setIsProxy] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Start GPS acquisition immediately
   useEffect(() => {
-    if (accessToken) {
-      websocketService.on('*', msg => console.log('🔥 RECEIVED:', msg))
+    setLocationStatus('pending')
+    getCurrentPosition()
+      .then((loc) => {
+        setStudentLocation(loc)
+        setLocationStatus('acquired')
+      })
+      .catch(() => {
+        setLocationStatus('denied')
+      })
+  }, [])
 
-      websocketService.on('attendance_started', msg => {
-        if (msg.session_id) {
-          setSessionId(msg.session_id)
-          toast.success('Attendance session started!')
+  // Poll for active sessions as fallback (in case WebSocket/Redis is down)
+  useEffect(() => {
+    if (sessionId) return // Already have a session, stop polling
 
-          // Request GPS location for proximity check
-          setLocationStatus('pending')
-          getCurrentPosition()
-            .then((loc) => {
-              setStudentLocation(loc)
-              setLocationStatus('acquired')
-            })
-            .catch(() => {
-              setLocationStatus('denied')
-            })
+    const checkSession = async () => {
+      try {
+        const data = await studentAPI.checkActiveSession()
+        if (data.active_session) {
+          setSessionId(data.active_session.session_id)
+          toast.success('Session found!')
         }
-      })
-
-      websocketService.on('otp_result', (msg: { success?: boolean; message?: string; status?: string }) => {
-        setIsSubmitting(false)
-        if (msg.success) {
-          if (msg.status === 'X') {
-            // Proxy — correct OTP but out of GPS range
-            setIsProxy(true)
-            toast.error(msg.message || 'Attendance flagged as Proxy')
-            setTimeout(() => {
-              navigate('/student')
-            }, 3000)
-          } else {
-            setAttendanceMarked(true)
-            toast.success(msg.message || 'Attendance marked!')
-            setTimeout(() => {
-              navigate('/student')
-            }, 2000)
-          }
-        } else {
-          const newRetryCount = retryCount + 1
-          setRetryCount(newRetryCount)
-
-          if (newRetryCount >= 3) {
-            setIsBlocked(true)
-            toast.error('Maximum attempts reached. Returning to home...')
-            setTimeout(() => {
-              navigate('/student')
-            }, 3000)
-          } else {
-            toast.error(`${msg.message} (Attempt ${newRetryCount}/3)`)
-            setOtp(['', '', '', ''])
-            document.getElementById('otp-0')?.focus()
-          }
-        }
-      })
-
-      websocketService.on('attendance_closed', () => {
-        toast('Session closed by teacher', { icon: 'ℹ️' })
-        navigate('/student')
-      })
-
-      websocketService.connect(accessToken).then(() => {
-        setIsConnected(true)
-      })
+      } catch {
+        // Ignore errors - polling will retry
+      }
     }
+
+    // Check immediately
+    checkSession()
+    // Then poll every 3 seconds
+    pollRef.current = setInterval(checkSession, 3000)
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [sessionId])
+
+  // WebSocket connection (works when Redis is available)
+  useEffect(() => {
+    if (!accessToken) return
+
+    websocketService.on('attendance_started', msg => {
+      if (msg.session_id) {
+        setSessionId(msg.session_id)
+        toast.success('Attendance session started!')
+      }
+    })
+
+    websocketService.on('otp_result', (msg: { success?: boolean; message?: string; status?: string }) => {
+      setIsSubmitting(false)
+      if (msg.success) {
+        if (msg.status === 'X') {
+          setIsProxy(true)
+          toast.error(msg.message || 'Attendance flagged as Proxy')
+          setTimeout(() => navigate('/student'), 3000)
+        } else {
+          setAttendanceMarked(true)
+          toast.success(msg.message || 'Attendance marked!')
+          setTimeout(() => navigate('/student'), 2000)
+        }
+      } else {
+        const newRetryCount = retryCount + 1
+        setRetryCount(newRetryCount)
+        if (newRetryCount >= 3) {
+          setIsBlocked(true)
+          toast.error('Maximum attempts reached.')
+          setTimeout(() => navigate('/student'), 3000)
+        } else {
+          toast.error(`${msg.message} (${newRetryCount}/3)`)
+          setOtp(['', '', '', ''])
+          document.getElementById('otp-0')?.focus()
+        }
+      }
+    })
+
+    websocketService.on('attendance_closed', () => {
+      toast('Session closed by teacher', { icon: 'ℹ️' })
+      navigate('/student')
+    })
+
+    websocketService.connect(accessToken).then(() => setIsConnected(true))
 
     return () => {
       websocketService.disconnect()
@@ -98,13 +114,10 @@ export default function StudentAttendance() {
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) return
-    // Accept alphanumeric characters (letters and numbers)
     if (!/^[a-zA-Z0-9]*$/.test(value)) return
-
     const newOtp = [...otp]
-    newOtp[index] = value.toUpperCase() // Convert to uppercase for consistency
+    newOtp[index] = value.toUpperCase()
     setOtp(newOtp)
-
     if (value && index < 3) {
       document.getElementById(`otp-${index + 1}`)?.focus()
     }
@@ -122,15 +135,6 @@ export default function StudentAttendance() {
       toast.error('Please enter complete OTP')
       return
     }
-
-    console.log('🔵 STUDENT SENDING:', {
-      type: 'submit_otp',
-      session_id: sessionId,
-      otp: otpValue,
-      student_email: user?.email,
-    })
-    console.log('👤 User object:', user)
-
     setIsSubmitting(true)
     websocketService.send({
       type: 'submit_otp',
@@ -142,204 +146,155 @@ export default function StudentAttendance() {
     })
   }
 
+  // Result screens
   if (isProxy) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4 text-center border-purple-200 dark:border-purple-800">
-          <CardHeader>
-            <div className="mx-auto w-16 h-16 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center mb-4">
-              <ShieldAlert className="h-10 w-10 text-purple-600 dark:text-purple-400" />
-            </div>
-            <CardTitle className="text-2xl text-purple-600 dark:text-purple-400">
-              Attendance Flagged
-            </CardTitle>
-            <CardDescription className="text-base mt-2">
-              Your attendance was flagged because your location could not be verified near the classroom. Your teacher will review this.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="mx-auto w-16 h-16 bg-purple-100 dark:bg-purple-900/50 rounded-full flex items-center justify-center mb-4">
+            <ShieldAlert className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+          </div>
+          <h2 className="text-xl font-heading font-bold text-purple-600 dark:text-purple-400 mb-2">Attendance Flagged</h2>
+          <p className="text-sm text-muted-foreground">Your location couldn't be verified. Your teacher will review this.</p>
+        </div>
       </div>
     )
   }
 
   if (isBlocked) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4 text-center border-red-200 dark:border-red-800">
-          <CardHeader>
-            <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mb-4">
-              <XCircle className="h-10 w-10 text-red-600 dark:text-red-400" />
-            </div>
-            <CardTitle className="text-2xl text-red-600 dark:text-red-400">
-              Maximum Attempts Reached
-            </CardTitle>
-            <CardDescription className="text-base mt-2">
-              You've used all 3 attempts. Please contact your teacher.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4">
+            <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+          </div>
+          <h2 className="text-xl font-heading font-bold text-red-600 dark:text-red-400 mb-2">Max Attempts Reached</h2>
+          <p className="text-sm text-muted-foreground">Please contact your teacher.</p>
+        </div>
       </div>
     )
   }
 
   if (attendanceMarked) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4 text-center">
-          <CardHeader>
-            <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle className="text-2xl text-green-600 dark:text-green-400">
-              Attendance Marked!
-            </CardTitle>
-            <CardDescription className="text-base mt-2">
-              Your attendance has been recorded successfully
-            </CardDescription>
-          </CardHeader>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 rounded-full flex items-center justify-center mb-4">
+            <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <h2 className="text-xl font-heading font-bold text-emerald-600 dark:text-emerald-400 mb-2">Attendance Marked!</h2>
+          <p className="text-sm text-muted-foreground">Your attendance has been recorded.</p>
+        </div>
       </div>
     )
   }
 
+  // Waiting for session
   if (!sessionId) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => navigate('/student')}>
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Mark Attendance
-                  </h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Waiting for session</p>
-                </div>
-              </div>
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-50 glass border-b safe-top">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/student')} className="rounded-xl h-9 w-9">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className="text-base font-heading font-bold text-foreground">Mark Attendance</h1>
             </div>
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <Card className="text-center">
-            <CardHeader>
-              <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
-                <Clock className="h-8 w-8 text-blue-600 dark:text-blue-400 animate-pulse" />
-              </div>
-              <CardTitle className="text-2xl">Waiting for Teacher</CardTitle>
-              <CardDescription className="text-base mt-2">
-                The teacher hasn't started the attendance session yet
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <div
-                  className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}
-                />
-                {isConnected ? 'Connected' : 'Connecting...'}
-              </div>
-            </CardContent>
-          </Card>
+        <main className="flex items-center justify-center px-4" style={{ minHeight: 'calc(100vh - 56px)' }}>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin mx-auto mb-4" />
+            <h2 className="text-lg font-heading font-semibold text-foreground mb-1">Waiting for Teacher</h2>
+            <p className="text-sm text-muted-foreground mb-3">Session hasn't started yet</p>
+            <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              {isConnected ? 'Connected' : 'Connecting...'}
+            </div>
+          </div>
         </main>
       </div>
     )
   }
 
+  // OTP entry screen
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/student')}>
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Mark Attendance
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Enter the OTP from teacher
-                </p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 glass border-b safe-top">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/student')} className="rounded-xl h-9 w-9">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-base font-heading font-bold text-foreground">Enter OTP</h1>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Enter 4-Digit OTP</CardTitle>
-            <CardDescription className="text-base mt-2">
-              Enter the code displayed by your teacher
-            </CardDescription>
+      <main className="flex items-center justify-center px-4" style={{ minHeight: 'calc(100vh - 56px)' }}>
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h2 className="text-xl font-heading font-bold text-foreground mb-1">Enter 4-Digit Code</h2>
+            <p className="text-sm text-muted-foreground">From your teacher's screen</p>
             {retryCount > 0 && (
-              <div className="mt-3">
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  Attempts remaining: {3 - retryCount}
-                </p>
-              </div>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                Attempts remaining: {3 - retryCount}
+              </p>
             )}
-            <div className="mt-3 flex items-center justify-center gap-2 text-sm">
-              <MapPin className={`h-4 w-4 ${
-                locationStatus === 'acquired' ? 'text-green-500' :
-                locationStatus === 'denied' || locationStatus === 'error' ? 'text-yellow-500' :
-                'text-gray-400 animate-pulse'
-              }`} />
-              <span className={
-                locationStatus === 'acquired' ? 'text-green-600 dark:text-green-400' :
-                locationStatus === 'denied' || locationStatus === 'error' ? 'text-yellow-600 dark:text-yellow-400' :
-                'text-gray-500 dark:text-gray-400'
-              }>
-                {locationStatus === 'acquired' ? 'Location acquired' :
-                 locationStatus === 'denied' ? 'Location denied — may affect attendance' :
-                 locationStatus === 'error' ? 'Location unavailable' :
-                 'Getting location...'}
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent className="pb-8">
-            {/* OTP Input Boxes - 4 DIGITS */}
-            <div className="flex justify-center gap-4 mb-8">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  id={`otp-${index}`}
-                  type="text"
-                  inputMode="text"
-                  maxLength={1}
-                  value={digit}
-                  onChange={e => handleOtpChange(index, e.target.value)}
-                  onKeyDown={e => handleKeyDown(index, e)}
-                  className="w-16 h-16 text-center text-3xl font-bold border-2 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-gray-800 dark:border-gray-600 dark:focus:border-blue-400 dark:focus:ring-blue-900 transition-all uppercase"
-                  disabled={isSubmitting || isBlocked}
-                  autoFocus={index === 0}
-                />
-              ))}
-            </div>
+          </div>
 
-            {/* Submit Button */}
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={handleSubmit}
-              disabled={isSubmitting || otp.join('').length !== 4 || isBlocked}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Submit Attendance'
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+          {/* OTP Inputs */}
+          <div className="flex justify-center gap-3 mb-6">
+            {otp.map((digit, index) => (
+              <input
+                key={index}
+                id={`otp-${index}`}
+                type="text"
+                inputMode="text"
+                maxLength={1}
+                value={digit}
+                onChange={e => handleOtpChange(index, e.target.value)}
+                onKeyDown={e => handleKeyDown(index, e)}
+                className="w-14 h-14 text-center text-2xl font-bold border-2 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 dark:bg-slate-800 dark:border-slate-600 dark:focus:border-amber-400 dark:focus:ring-amber-900 transition-all uppercase bg-background text-foreground"
+                disabled={isSubmitting || isBlocked}
+                autoFocus={index === 0}
+              />
+            ))}
+          </div>
+
+          {/* Location status */}
+          <div className="flex items-center justify-center gap-1.5 text-xs mb-6">
+            <MapPin className={`h-3.5 w-3.5 ${
+              locationStatus === 'acquired' ? 'text-emerald-500' :
+              locationStatus === 'denied' || locationStatus === 'error' ? 'text-amber-500' :
+              'text-muted-foreground animate-pulse'
+            }`} />
+            <span className={
+              locationStatus === 'acquired' ? 'text-emerald-600 dark:text-emerald-400' :
+              locationStatus === 'denied' || locationStatus === 'error' ? 'text-amber-600 dark:text-amber-400' :
+              'text-muted-foreground'
+            }>
+              {locationStatus === 'acquired' ? 'Location acquired' :
+               locationStatus === 'denied' ? 'Location denied' :
+               locationStatus === 'error' ? 'Location unavailable' :
+               'Getting location...'}
+            </span>
+          </div>
+
+          <Button
+            className="w-full rounded-xl h-11 bg-amber-500 hover:bg-amber-600 font-semibold"
+            onClick={handleSubmit}
+            disabled={isSubmitting || otp.join('').length !== 4 || isBlocked}
+          >
+            {isSubmitting ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</>
+            ) : (
+              'Submit'
+            )}
+          </Button>
+        </div>
       </main>
     </div>
   )

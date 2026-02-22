@@ -943,6 +943,11 @@ export const studentAPI = {
     return response.data
   },
 
+  checkActiveSession: async (): Promise<{ active_session: { session_id: number; subject_name: string; class_name: string } | null }> => {
+    const response = await api.get('/student/active-session/')
+    return response.data
+  },
+
   getWeeklySchedule: async (): Promise<StudentWeeklyScheduleItem[]> => {
     const response = await api.get<StudentWeeklyScheduleItem[]>('/student/schedule/weekly/')
     return response.data

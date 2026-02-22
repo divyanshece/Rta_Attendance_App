@@ -421,39 +421,24 @@ export default function TeacherAttendance() {
                 </div>
               </div>
 
-              {/* Divider */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground uppercase tracking-wider">or browse all</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-
-              {/* Card Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {classes.map((cls: ClassForAttendance, i: number) => (
+              {/* All Subjects - Compact List */}
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">All Subjects</p>
+              <div className="bg-card rounded-xl border divide-y">
+                {classes.map((cls: ClassForAttendance) => (
                   <button
                     key={`${cls.class_id}-${cls.subject_id}`}
                     onClick={() => handleSelectClass(cls)}
-                    className={`group text-left p-6 rounded-2xl bg-card border hover:border-amber-500 hover:shadow-xl transition-all duration-300 hover:scale-[1.02] animate-in opacity-0 stagger-${Math.min(i + 1, 6)}`}
+                    className="w-full flex items-center justify-between px-3 py-3 hover:bg-muted/50 active:bg-muted transition-colors text-left"
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/20">
-                        <BookOpen className="h-6 w-6 text-white" />
-                      </div>
-                      <Badge variant="secondary" className="font-heading">
-                        {cls.student_count} students
-                      </Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-foreground truncate">{cls.subject_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {cls.class_name} &middot; {cls.department_name}
+                      </p>
                     </div>
-
-                    <h3 className="font-heading font-bold text-lg text-foreground mb-1 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                      {cls.subject_name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-3">{cls.class_name}</p>
-
-                    <div className="pt-3 border-t border-dashed text-xs text-muted-foreground space-y-1">
-                      <p>{cls.department_name}</p>
-                      <p>Batch {cls.batch} • Sem {cls.semester}{cls.section && cls.section.trim() ? ` • Sec ${cls.section}` : ''}</p>
-                    </div>
+                    <Badge variant="secondary" className="text-[10px] ml-2 flex-shrink-0">
+                      {cls.student_count}
+                    </Badge>
                   </button>
                 ))}
               </div>
@@ -467,121 +452,95 @@ export default function TeacherAttendance() {
   // Step 2: Confirmation
   if (step === 'confirm' && selectedClass && !currentSessionId) {
     return (
-      <div className="min-h-screen bg-background bg-gradient-mesh flex items-center justify-center p-4">
-        <div className="max-w-lg w-full animate-in opacity-0">
-          <div className="bg-card rounded-3xl border shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-8 text-center text-white relative">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-50" />
-              <div className="relative">
-                <div className="inline-flex p-4 rounded-2xl bg-white/20 mb-4">
-                  <Users className="h-10 w-10" />
-                </div>
-                <h2 className="text-2xl font-heading font-bold mb-1">{selectedClass.subject_name}</h2>
-                <p className="text-white/80">{selectedClass.class_name}</p>
-              </div>
-            </div>
-
-            <div className="p-8">
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Students</p>
-                  <p className="text-3xl font-heading font-bold text-foreground">{selectedClass.student_count}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Date</p>
-                  <p className="text-3xl font-heading font-bold text-foreground">
-                    {new Date().toLocaleDateString('en-US', { day: 'numeric' })}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 text-sm text-muted-foreground mb-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                <div className="flex justify-between"><span>Department</span><span className="text-foreground font-medium">{selectedClass.department_name}</span></div>
-                <div className="flex justify-between"><span>Batch</span><span className="text-foreground font-medium">{selectedClass.batch}</span></div>
-                <div className="flex justify-between"><span>Semester</span><span className="text-foreground font-medium">{selectedClass.semester}</span></div>
-                <div className="flex justify-between"><span>Section</span><span className="text-foreground font-medium">{selectedClass.section}</span></div>
-              </div>
-
-              {/* Offline / Online Toggle */}
-              <div className="mb-6 p-4 rounded-xl border bg-slate-50 dark:bg-slate-800/50">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    {classMode === 'offline' ? (
-                      <MapPin className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    ) : (
-                      <Wifi className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    )}
-                    <span className="text-sm font-medium text-foreground">Class Mode</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setClassMode(classMode === 'offline' ? 'online' : 'offline')
-                      setLocationError(null)
-                    }}
-                    className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 ${
-                      classMode === 'online' ? 'bg-blue-500' : 'bg-emerald-500'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                        classMode === 'online' ? 'translate-x-8' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                    classMode === 'offline'
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                  }`}>
-                    Offline Class
-                  </span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${
-                    classMode === 'online'
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                      : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                  }`}>
-                    Online Class
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {classMode === 'offline'
-                    ? 'GPS proximity check enabled (30m radius). Students outside range will be flagged as Proxy.'
-                    : 'No GPS check. Students can mark attendance from anywhere with OTP.'}
-                </p>
-                {locationError && (
-                  <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    {locationError}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1 rounded-xl h-12" onClick={() => setStep('select')}>
-                  Back
-                </Button>
-                <Button
-                  className="flex-1 rounded-xl h-12 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-900"
-                  onClick={handleStartSession}
-                  disabled={initiateMutation.isPending || isGettingLocation}
-                >
-                  {isGettingLocation ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Getting GPS...</>
-                  ) : initiateMutation.isPending ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting...</>
-                  ) : (
-                    <><Sparkles className="mr-2 h-5 w-5" />Start Session</>
-                  )}
-                </Button>
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-50 glass border-b">
+          <div className="max-w-2xl mx-auto px-4">
+            <div className="flex items-center gap-3 h-14">
+              <Button variant="ghost" size="icon" onClick={() => setStep('select')} className="rounded-xl h-9 w-9">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-base font-heading font-bold text-foreground">Confirm Session</h1>
+                <p className="text-[11px] text-muted-foreground">{selectedClass.subject_name}</p>
               </div>
             </div>
           </div>
-        </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 py-5">
+          <div className="space-y-4">
+            {/* Class info */}
+            <div className="bg-card rounded-xl border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-semibold text-foreground">{selectedClass.subject_name}</p>
+                  <p className="text-xs text-muted-foreground">{selectedClass.class_name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-heading font-bold text-foreground">{selectedClass.student_count}</p>
+                  <p className="text-[10px] text-muted-foreground">students</p>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1 pt-3 border-t">
+                <div className="flex justify-between"><span>Department</span><span className="text-foreground">{selectedClass.department_name}</span></div>
+                <div className="flex justify-between"><span>Date</span><span className="text-foreground">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+              </div>
+            </div>
+
+            {/* Class Mode Toggle */}
+            <div className="bg-card rounded-xl border p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  {classMode === 'offline' ? (
+                    <MapPin className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Wifi className="h-4 w-4 text-blue-500" />
+                  )}
+                  <span className="text-sm font-medium text-foreground">Class Mode</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setClassMode(classMode === 'offline' ? 'online' : 'offline')
+                    setLocationError(null)
+                  }}
+                  className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors duration-200 ${
+                    classMode === 'online' ? 'bg-blue-500' : 'bg-emerald-500'
+                  }`}
+                >
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
+                    classMode === 'online' ? 'translate-x-8' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {classMode === 'offline'
+                  ? 'GPS proximity check (30m). Students outside flagged as Proxy.'
+                  : 'No GPS check. Students mark from anywhere.'}
+              </p>
+              {locationError && (
+                <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {locationError}
+                </p>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <Button
+              className="w-full rounded-xl h-12 bg-amber-500 hover:bg-amber-600 font-semibold"
+              onClick={handleStartSession}
+              disabled={initiateMutation.isPending || isGettingLocation}
+            >
+              {isGettingLocation ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Getting GPS...</>
+              ) : initiateMutation.isPending ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting...</>
+              ) : (
+                <><Sparkles className="mr-2 h-4 w-4" />Start Session</>
+              )}
+            </Button>
+          </div>
+        </main>
       </div>
     )
   }

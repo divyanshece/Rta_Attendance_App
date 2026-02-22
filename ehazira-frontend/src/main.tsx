@@ -43,13 +43,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <App />
           <Toaster
             position="top-center"
+            containerStyle={{
+              top: 'env(safe-area-inset-top, 12px)',
+              paddingTop: 12,
+            }}
             toastOptions={{
               duration: 3000,
               style: {
                 background: '#333',
                 color: '#fff',
-                padding: '16px',
-                borderRadius: '8px',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                maxWidth: '90vw',
               },
               success: {
                 iconTheme: {
