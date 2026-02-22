@@ -36,28 +36,32 @@ export default function StudentAttendance() {
       })
   }, [])
 
-  // Poll for active sessions as fallback (in case WebSocket/Redis is down)
+  // Poll for active sessions (primary discovery method - works even when Redis/WebSocket is down)
   useEffect(() => {
     if (sessionId) return // Already have a session, stop polling
 
+    let active = true
+
     const checkSession = async () => {
+      if (!active) return
       try {
         const data = await studentAPI.checkActiveSession()
-        if (data.active_session) {
+        if (active && data.active_session) {
           setSessionId(data.active_session.session_id)
           toast.success('Session found!')
         }
-      } catch {
-        // Ignore errors - polling will retry
+      } catch (err) {
+        console.log('[poll] active-session check failed:', err)
       }
     }
 
     // Check immediately
     checkSession()
-    // Then poll every 3 seconds
-    pollRef.current = setInterval(checkSession, 3000)
+    // Then poll every 2 seconds for faster detection
+    pollRef.current = setInterval(checkSession, 2000)
 
     return () => {
+      active = false
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [sessionId])
