@@ -688,70 +688,22 @@ export default function ClassDetailPage() {
                 {studentsData?.students?.map((student: StudentEnrollment) => (
                   <div
                     key={student.student_email}
-                    className="flex items-center justify-between p-3 sm:p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
+                    className="bg-card rounded-xl border p-3 sm:p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 active:bg-slate-100 dark:active:bg-slate-800 transition-colors"
+                    onClick={() => {
+                      setEditingStudent(student)
+                      setEditStudentForm({ name: student.student_name, roll_no: student.roll_no })
+                      setShowEditStudentModal(true)
+                    }}
                   >
-                    <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
-                      <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
                         {student.student_name.charAt(0)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <p className="font-semibold text-foreground text-sm sm:text-base truncate max-w-[150px] sm:max-w-none">{student.student_name}</p>
-                          {student.verified && (
-                            <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] sm:text-xs px-1.5 py-0.5">
-                              <CheckCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Verified</span>
-                            </Badge>
-                          )}
-                        </div>
+                        <p className="font-semibold text-foreground text-sm sm:text-base">{student.student_name}</p>
                         <p className="text-xs sm:text-sm text-muted-foreground truncate">{student.student_email}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground">Roll: {student.roll_no}</p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {/* Edit Student Button */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingStudent(student)
-                          setEditStudentForm({ name: student.student_name, roll_no: student.roll_no })
-                          setShowEditStudentModal(true)
-                        }}
-                        className="rounded-xl text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
-                        title="Edit student details"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {/* Reset Device Button */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={async () => {
-                          if (await confirm('Reset Device', `Reset device for ${student.student_name}? This will allow them to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
-                            resetDeviceMutation.mutate(student.student_email)
-                          }
-                        }}
-                        className="rounded-xl text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
-                        title="Reset student's device"
-                      >
-                        <Smartphone className="h-4 w-4" />
-                      </Button>
-                      {/* Remove Student Button - Coordinator only */}
-                      {classInfo?.is_coordinator && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={async () => {
-                            if (await confirm('Remove Student', `Remove ${student.student_name} from this class?`, { confirmLabel: 'Remove' })) {
-                              removeStudentMutation.mutate(student.student_email)
-                            }
-                          }}
-                          className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <p className="text-xs text-muted-foreground flex-shrink-0">{student.roll_no}</p>
                     </div>
                   </div>
                 ))}
@@ -1384,6 +1336,103 @@ export default function ClassDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Student Management Modal - tap a student to open */}
+      {showEditStudentModal && editingStudent && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-card z-10">
+              <h3 className="font-heading font-bold text-base sm:text-lg text-foreground">Student Details</h3>
+              <Button variant="ghost" size="icon" onClick={() => { setShowEditStudentModal(false); setEditingStudent(null) }} className="rounded-xl h-8 w-8 sm:h-10 sm:w-10">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={editingStudent.student_email}
+                  disabled
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-muted text-muted-foreground cursor-not-allowed text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
+                <input
+                  type="text"
+                  value={editStudentForm.name}
+                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Student name"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Roll Number</label>
+                <input
+                  type="text"
+                  value={editStudentForm.roll_no}
+                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
+                  placeholder="Roll number"
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm"
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  if (editingStudent) {
+                    updateStudentMutation.mutate({
+                      email: editingStudent.student_email,
+                      data: editStudentForm,
+                    })
+                  }
+                }}
+                disabled={!editStudentForm.name || !editStudentForm.roll_no || updateStudentMutation.isPending}
+                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-10 sm:h-11"
+              >
+                {updateStudentMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+
+              {/* Other actions */}
+              <div className="border-t pt-3 space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl h-10 text-sm"
+                  onClick={async () => {
+                    if (await confirm('Reset Device', `Reset device for ${editingStudent.student_name}? They will be able to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
+                      resetDeviceMutation.mutate(editingStudent.student_email)
+                    }
+                  }}
+                >
+                  <Smartphone className="h-4 w-4 mr-2" />
+                  Reset Device
+                </Button>
+                {classInfo?.is_coordinator && (
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl h-10 text-sm text-red-500 hover:text-red-600 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={async () => {
+                      if (await confirm('Remove Student', `Remove ${editingStudent.student_name} from this class?`, { confirmLabel: 'Remove' })) {
+                        removeStudentMutation.mutate(editingStudent.student_email)
+                        setShowEditStudentModal(false)
+                        setEditingStudent(null)
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove from Class
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ConfirmDialog}
     </div>
   )
 }
@@ -1551,68 +1600,6 @@ function SubjectEnrollmentModal({ subjectId, subjectName, onClose }: { subjectId
           </div>
         )}
 
-      {/* Edit Student Modal */}
-      {showEditStudentModal && editingStudent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl">
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
-              <h3 className="font-heading font-bold text-lg text-foreground">Edit Student</h3>
-              <Button variant="ghost" size="icon" onClick={() => { setShowEditStudentModal(false); setEditingStudent(null) }} className="rounded-xl">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="p-4 sm:p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Email</label>
-                <input
-                  type="email"
-                  value={editingStudent.student_email}
-                  disabled
-                  className="w-full px-4 py-3 border rounded-xl bg-muted text-muted-foreground cursor-not-allowed"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Name</label>
-                <input
-                  type="text"
-                  value={editStudentForm.name}
-                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Student name"
-                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Roll Number</label>
-                <input
-                  type="text"
-                  value={editStudentForm.roll_no}
-                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
-                  placeholder="Roll number"
-                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
-                />
-              </div>
-              <Button
-                onClick={() => {
-                  if (editingStudent) {
-                    updateStudentMutation.mutate({
-                      email: editingStudent.student_email,
-                      data: editStudentForm,
-                    })
-                  }
-                }}
-                disabled={!editStudentForm.name || !editStudentForm.roll_no || updateStudentMutation.isPending}
-                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11"
-              >
-                {updateStudentMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
-                ) : (
-                  <><Pencil className="h-4 w-4 mr-2" />Save Changes</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
     </div>
   )

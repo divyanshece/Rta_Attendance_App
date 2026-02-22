@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminAPI, AdminTeacher, AdminDepartment, AdminStudent } from '@/services/api'
@@ -15,7 +15,6 @@ import {
   Trash2,
   Upload,
   Shield,
-  ShieldCheck,
   FileSpreadsheet,
   X,
   Loader2,
@@ -31,10 +30,11 @@ export default function AdminPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { confirm, ConfirmDialog } = useConfirm()
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'departments' | 'students'>('overview')
+  const [activeTab, setActiveTab] = useState<'teachers' | 'departments' | 'students'>('teachers')
   const [searchQuery, setSearchQuery] = useState('')
-  const [studentSearchQuery, setStudentSearchQuery] = useState('')
+  const [deptSearchQuery, setDeptSearchQuery] = useState('')
   const [studentSearchInput, setStudentSearchInput] = useState('')
+  const [studentSearchQuery, setStudentSearchQuery] = useState('')
 
   // Modal states
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false)
@@ -183,11 +183,23 @@ export default function AdminPage() {
     },
   })
 
+  // Debounced student search
+  useEffect(() => {
+    const timer = setTimeout(() => setStudentSearchQuery(studentSearchInput), 400)
+    return () => clearTimeout(timer)
+  }, [studentSearchInput])
+
   // Filtered teachers
   const filteredTeachers = (teachersData?.teachers || []).filter((t: AdminTeacher) =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.department_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Filtered departments
+  const filteredDepts = (departmentsData?.departments || []).filter((d: AdminDepartment) =>
+    d.department_name.toLowerCase().includes(deptSearchQuery.toLowerCase()) ||
+    (d.school && d.school.toLowerCase().includes(deptSearchQuery.toLowerCase()))
   )
 
   if (isLoadingDashboard) {
@@ -225,17 +237,23 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Organization Header */}
+      {/* Organization Header with Stats */}
       <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-2xl bg-white/20 backdrop-blur">
-              <Building2 className="h-8 w-8" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex items-center gap-3 sm:gap-4 mb-3">
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-white/20 backdrop-blur">
+              <Building2 className="h-6 w-6 sm:h-8 sm:w-8" />
             </div>
             <div>
-              <h1 className="text-2xl font-heading font-bold">{dashboard?.organization.name}</h1>
-              <p className="text-white/80">{dashboard?.organization.code}</p>
+              <h1 className="text-lg sm:text-2xl font-heading font-bold">{dashboard?.organization.name}</h1>
+              <p className="text-white/80 text-xs sm:text-sm">{dashboard?.organization.code}</p>
             </div>
+          </div>
+          <div className="flex gap-4 sm:gap-6 text-white/90 text-xs sm:text-sm">
+            <span><strong>{dashboard?.stats.teachers}</strong> Teachers</span>
+            <span><strong>{dashboard?.stats.departments}</strong> Depts</span>
+            <span><strong>{dashboard?.stats.active_classes}</strong> Classes</span>
+            <span><strong>{dashboard?.stats.students}</strong> Students</span>
           </div>
         </div>
       </div>
@@ -244,119 +262,26 @@ export default function AdminPage() {
       <div className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex">
-            <button
-              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
-                activeTab === 'overview' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
-              }`}
-              onClick={() => setActiveTab('overview')}
-            >
-              <Building2 className="h-4 w-4" />
-              Overview
-            </button>
-            <button
-              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
-                activeTab === 'teachers' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
-              }`}
-              onClick={() => setActiveTab('teachers')}
-            >
-              <Users className="h-4 w-4" />
-              Teachers
-              <Badge variant="secondary" className="text-xs">{dashboard?.stats.teachers || 0}</Badge>
-            </button>
-            <button
-              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
-                activeTab === 'departments' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
-              }`}
-              onClick={() => setActiveTab('departments')}
-            >
-              <BookOpen className="h-4 w-4" />
-              <span className="hidden sm:inline">Departments</span>
-              <Badge variant="secondary" className="text-xs">{dashboard?.stats.departments || 0}</Badge>
-            </button>
-            <button
-              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
-                activeTab === 'students' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
-              }`}
-              onClick={() => setActiveTab('students')}
-            >
-              <GraduationCap className="h-4 w-4" />
-              Students
-              <Badge variant="secondary" className="text-xs">{dashboard?.stats.students || 0}</Badge>
-            </button>
+            {([
+              { key: 'teachers' as const, label: 'Teachers' },
+              { key: 'departments' as const, label: 'Departments' },
+              { key: 'students' as const, label: 'Students' },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                className={`flex-1 px-3 sm:px-6 py-3 text-sm font-medium border-b-2 text-center ${
+                  activeTab === tab.key ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
+                }`}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-card rounded-2xl border p-4 sm:p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-xl bg-violet-100 dark:bg-violet-900/30">
-                    <Users className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                  </div>
-                </div>
-                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.teachers}</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">Teachers</p>
-              </div>
-              <div className="bg-card rounded-2xl border p-4 sm:p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                    <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                </div>
-                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.departments}</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">Departments</p>
-              </div>
-              <div className="bg-card rounded-2xl border p-4 sm:p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/30">
-                    <GraduationCap className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                </div>
-                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.active_classes}</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">Active Classes</p>
-              </div>
-              <div className="bg-card rounded-2xl border p-4 sm:p-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30">
-                    <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                </div>
-                <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{dashboard?.stats.students}</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">Students</p>
-              </div>
-            </div>
-
-            {/* Admins List */}
-            <div className="bg-card rounded-2xl border p-6">
-              <h3 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-amber-500" />
-                Organization Admins
-              </h3>
-              <div className="space-y-2">
-                {dashboard?.admins.map((admin) => (
-                  <div
-                    key={admin.email}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-semibold">
-                      {admin.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">{admin.name}</p>
-                      <p className="text-sm text-muted-foreground">{admin.email}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Teachers Tab */}
         {activeTab === 'teachers' && (
           <div className="space-y-4">
@@ -461,9 +386,18 @@ export default function AdminPage() {
         {/* Departments Tab */}
         {activeTab === 'departments' && (
           <div className="space-y-4">
-            {/* Actions */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-heading font-semibold text-foreground">Manage Departments</h2>
+            {/* Search + Add */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="relative flex-1 w-full sm:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search departments..."
+                  value={deptSearchQuery}
+                  onChange={(e) => setDeptSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-background text-foreground"
+                />
+              </div>
               <Button onClick={() => setShowAddDeptModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Department
@@ -475,15 +409,19 @@ export default function AdminPage() {
               <div className="flex items-center justify-center py-12">
                 <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
               </div>
-            ) : (departmentsData?.departments || []).length === 0 ? (
+            ) : filteredDepts.length === 0 ? (
               <div className="text-center py-12 bg-card rounded-2xl border">
                 <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-medium text-foreground mb-2">No departments</h3>
-                <p className="text-sm text-muted-foreground">Create departments to organize teachers</p>
+                <h3 className="font-medium text-foreground mb-2">
+                  {deptSearchQuery ? 'No departments found' : 'No departments'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {deptSearchQuery ? 'Try a different search' : 'Create departments to organize teachers'}
+                </p>
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
-                {(departmentsData?.departments || []).map((dept: AdminDepartment) => (
+                {filteredDepts.map((dept: AdminDepartment) => (
                   <div
                     key={dept.department_id}
                     className="flex items-center justify-between p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
@@ -526,112 +464,81 @@ export default function AdminPage() {
         {activeTab === 'students' && (
           <div className="space-y-4">
             {/* Search */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <form
-                className="relative flex-1 max-w-md"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  setStudentSearchQuery(studentSearchInput)
-                }}
-              >
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search by name, email, or roll..."
-                  value={studentSearchInput}
-                  onChange={(e) => setStudentSearchInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') setStudentSearchQuery(studentSearchInput) }}
-                  className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-background text-foreground"
-                />
-              </form>
-              <Button
-                variant="outline"
-                onClick={() => setStudentSearchQuery(studentSearchInput)}
-                className="rounded-xl"
-              >
-                <Search className="h-4 w-4 mr-2" />
-                Search
-              </Button>
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by name, email, or roll number..."
+                value={studentSearchInput}
+                onChange={(e) => setStudentSearchInput(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-background text-foreground"
+              />
             </div>
 
             {/* Students List */}
             {isLoadingStudents ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+                <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
               </div>
             ) : !studentsData?.students?.length ? (
-              <div className="text-center py-12 bg-card rounded-2xl border">
-                <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-medium text-foreground mb-2">
-                  {studentSearchQuery ? 'No students found' : 'Search for students'}
-                </h3>
+              <div className="text-center py-10 bg-card rounded-2xl border">
+                <GraduationCap className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  {studentSearchQuery ? 'Try a different search term' : 'Enter a name, email, or roll number to search'}
+                  {studentSearchQuery ? 'No students found' : 'Search for students or scroll to browse'}
                 </p>
               </div>
             ) : (
-              <div className="grid gap-3">
-                <p className="text-sm text-muted-foreground">{studentsData.count} student{studentsData.count !== 1 ? 's' : ''} found</p>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground px-1">{studentsData.count} result{studentsData.count !== 1 ? 's' : ''}</p>
                 {studentsData.students.map((student: AdminStudent) => (
                   <div
                     key={student.email}
-                    className="flex items-center justify-between p-3 sm:p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
+                    className="bg-card rounded-xl border p-4"
                   >
-                    <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
-                      <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
-                        {student.name.charAt(0)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <p className="font-semibold text-foreground text-sm sm:text-base truncate max-w-[150px] sm:max-w-none">{student.name}</p>
-                          {student.verified && (
-                            <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] sm:text-xs px-1.5 py-0.5">
-                              <CheckCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Verified</span>
-                            </Badge>
-                          )}
-                          {student.has_active_device && (
-                            <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[10px] sm:text-xs px-1.5 py-0.5">
-                              <Smartphone className="h-2.5 w-2.5 sm:h-3 sm:w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Device</span>
-                            </Badge>
-                          )}
+                    {/* Student Info */}
+                    <div className="mb-3">
+                      <p className="font-semibold text-foreground text-base">{student.name}</p>
+                      <p className="text-sm text-muted-foreground">{student.email}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Roll: {student.roll_no}
+                        {student.class_name && <> &middot; {student.class_name}</>}
+                        {student.department && <> &middot; {student.department}</>}
+                      </p>
+                      {(student.verified || student.has_active_device) && (
+                        <div className="flex gap-3 mt-1.5 text-xs text-muted-foreground">
+                          {student.verified && <span className="text-emerald-600 dark:text-emerald-400">Verified</span>}
+                          {student.has_active_device && <span className="text-blue-600 dark:text-blue-400">Device linked</span>}
                         </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{student.email}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground">
-                          Roll: {student.roll_no} {student.class_name ? `• ${student.class_name}` : ''} {student.department ? `• ${student.department}` : ''}
-                        </p>
-                      </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      {/* Edit Student */}
+                    {/* Actions - clear text buttons */}
+                    <div className="flex gap-2 border-t pt-3">
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           setEditingStudent(student)
                           setEditStudentForm({ name: student.name, roll_no: student.roll_no })
                           setShowEditStudentModal(true)
                         }}
-                        className="rounded-xl text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
-                        title="Edit student"
+                        className="rounded-lg text-xs h-8"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                        Edit
                       </Button>
-                      {/* Reset Device */}
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
                         onClick={async () => {
-                          if (await confirm('Reset Device', `Reset device for ${student.name}? This will allow them to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
+                          if (await confirm('Reset Device', `Reset device for ${student.name}? They will be able to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
                             resetStudentDeviceMutation.mutate(student.email)
                           }
                         }}
                         disabled={resetStudentDeviceMutation.isPending}
-                        className="rounded-xl text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
-                        title="Reset student's device"
+                        className="rounded-lg text-xs h-8"
                       >
-                        <Smartphone className="h-4 w-4" />
+                        <Smartphone className="h-3.5 w-3.5 mr-1.5" />
+                        Reset Device
                       </Button>
                     </div>
                   </div>
