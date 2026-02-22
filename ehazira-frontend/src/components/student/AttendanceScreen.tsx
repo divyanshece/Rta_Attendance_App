@@ -36,9 +36,9 @@ export default function StudentAttendance() {
       })
   }, [])
 
-  // Poll for active sessions (primary discovery method - works even when Redis/WebSocket is down)
+  // HTTP polling for session discovery (backup + works when WebSocket is slow to connect)
   useEffect(() => {
-    if (sessionId) return // Already have a session, stop polling
+    if (sessionId) return
 
     let active = true
 
@@ -50,14 +50,12 @@ export default function StudentAttendance() {
           setSessionId(data.active_session.session_id)
           toast.success('Session found!')
         }
-      } catch (err) {
-        console.log('[poll] active-session check failed:', err)
+      } catch {
+        // Silently retry
       }
     }
 
-    // Check immediately
     checkSession()
-    // Then poll every 2 seconds for faster detection
     pollRef.current = setInterval(checkSession, 2000)
 
     return () => {
@@ -66,7 +64,7 @@ export default function StudentAttendance() {
     }
   }, [sessionId])
 
-  // WebSocket connection (works when Redis is available)
+  // WebSocket connection for real-time events
   useEffect(() => {
     if (!accessToken) return
 
@@ -109,7 +107,9 @@ export default function StudentAttendance() {
       navigate('/student')
     })
 
-    websocketService.connect(accessToken).then(() => setIsConnected(true))
+    websocketService.connect(accessToken)
+      .then(() => setIsConnected(true))
+      .catch(() => setIsConnected(false))
 
     return () => {
       websocketService.disconnect()
@@ -133,21 +133,88 @@ export default function StudentAttendance() {
     }
   }
 
-  const handleSubmit = () => {
+  // Submit OTP — try WebSocket first, fall back to HTTP
+  const handleSubmit = async () => {
     const otpValue = otp.join('')
     if (otpValue.length !== 4) {
       toast.error('Please enter complete OTP')
       return
     }
+    if (!sessionId) return
+
     setIsSubmitting(true)
-    websocketService.send({
-      type: 'submit_otp',
-      session_id: sessionId,
-      otp: otpValue,
-      student_email: user?.email,
-      latitude: studentLocation?.lat ?? null,
-      longitude: studentLocation?.lng ?? null,
-    })
+
+    // If WebSocket is connected, use it (real-time response via otp_result handler)
+    if (websocketService.isConnected()) {
+      websocketService.send({
+        type: 'submit_otp',
+        session_id: sessionId,
+        otp: otpValue,
+        student_email: user?.email,
+        latitude: studentLocation?.lat ?? null,
+        longitude: studentLocation?.lng ?? null,
+      })
+      // Response comes via WebSocket otp_result event handler above
+      // Set a timeout to fall back to HTTP if WebSocket doesn't respond
+      setTimeout(async () => {
+        if (isSubmitting) {
+          // WebSocket didn't respond in 5 seconds, try HTTP
+          try {
+            const result = await studentAPI.submitOTP({
+              session_id: sessionId,
+              otp: otpValue,
+              latitude: studentLocation?.lat ?? null,
+              longitude: studentLocation?.lng ?? null,
+            })
+            handleHttpOtpResult(result)
+          } catch {
+            setIsSubmitting(false)
+            toast.error('Failed to submit. Please try again.')
+          }
+        }
+      }, 5000)
+    } else {
+      // WebSocket not connected, use HTTP directly
+      try {
+        const result = await studentAPI.submitOTP({
+          session_id: sessionId,
+          otp: otpValue,
+          latitude: studentLocation?.lat ?? null,
+          longitude: studentLocation?.lng ?? null,
+        })
+        handleHttpOtpResult(result)
+      } catch {
+        setIsSubmitting(false)
+        toast.error('Failed to submit. Please try again.')
+      }
+    }
+  }
+
+  const handleHttpOtpResult = (result: { success: boolean; message: string; status?: string; blocked?: boolean }) => {
+    setIsSubmitting(false)
+    if (result.success) {
+      if (result.status === 'X') {
+        setIsProxy(true)
+        toast.error(result.message || 'Attendance flagged as Proxy')
+        setTimeout(() => navigate('/student'), 3000)
+      } else {
+        setAttendanceMarked(true)
+        toast.success(result.message || 'Attendance marked!')
+        setTimeout(() => navigate('/student'), 2000)
+      }
+    } else {
+      const newRetryCount = retryCount + 1
+      setRetryCount(newRetryCount)
+      if (result.blocked || newRetryCount >= 3) {
+        setIsBlocked(true)
+        toast.error('Maximum attempts reached.')
+        setTimeout(() => navigate('/student'), 3000)
+      } else {
+        toast.error(`${result.message} (${newRetryCount}/3)`)
+        setOtp(['', '', '', ''])
+        document.getElementById('otp-0')?.focus()
+      }
+    }
   }
 
   // Result screens
@@ -197,13 +264,13 @@ export default function StudentAttendance() {
   if (!sessionId) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-50 glass border-b safe-top">
-          <div className="max-w-7xl mx-auto px-4 py-3">
-            <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-50 glass border-b">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="flex items-center h-14">
               <Button variant="ghost" size="icon" onClick={() => navigate('/student')} className="rounded-xl h-9 w-9">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-base font-heading font-bold text-foreground">Mark Attendance</h1>
+              <h1 className="text-base font-heading font-bold text-foreground ml-3">Mark Attendance</h1>
             </div>
           </div>
         </header>
@@ -226,13 +293,13 @@ export default function StudentAttendance() {
   // OTP entry screen
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 glass border-b safe-top">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-50 glass border-b">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center h-14">
             <Button variant="ghost" size="icon" onClick={() => navigate('/student')} className="rounded-xl h-9 w-9">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="text-base font-heading font-bold text-foreground">Enter OTP</h1>
+            <h1 className="text-base font-heading font-bold text-foreground ml-3">Enter OTP</h1>
           </div>
         </div>
       </header>

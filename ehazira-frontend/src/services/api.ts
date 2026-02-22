@@ -948,6 +948,11 @@ export const studentAPI = {
     return response.data
   },
 
+  submitOTP: async (data: { session_id: number; otp: string; latitude: number | null; longitude: number | null }): Promise<{ success: boolean; message: string; status?: string; blocked?: boolean }> => {
+    const response = await api.post('/student/submit-otp/', data)
+    return response.data
+  },
+
   getWeeklySchedule: async (): Promise<StudentWeeklyScheduleItem[]> => {
     const response = await api.get<StudentWeeklyScheduleItem[]>('/student/schedule/weekly/')
     return response.data
