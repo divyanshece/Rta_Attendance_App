@@ -101,8 +101,12 @@ export async function getDeviceUUID(): Promise<string> {
   if (isNative()) {
     await loadDevicePlugin()
     if (DevicePlugin) {
-      const info = await DevicePlugin.getId()
-      return info.identifier
+      try {
+        const info = await DevicePlugin.getId()
+        if (info?.identifier) return info.identifier
+      } catch (e) {
+        console.warn('Device.getId() failed, using fallback:', e)
+      }
     }
   }
 
@@ -126,15 +130,19 @@ export async function getDeviceFingerprint(): Promise<string> {
   if (isNative()) {
     await loadDevicePlugin()
     if (DevicePlugin) {
-      const info = await DevicePlugin.getInfo()
-      const data = [
-        info.manufacturer,
-        info.model,
-        info.operatingSystem,
-        info.osVersion,
-        info.platform,
-      ].join('|')
-      return btoa(data).substring(0, 64)
+      try {
+        const info = await DevicePlugin.getInfo()
+        const data = [
+          info.manufacturer,
+          info.model,
+          info.operatingSystem,
+          info.osVersion,
+          info.platform,
+        ].join('|')
+        return btoa(data).substring(0, 64)
+      } catch (e) {
+        console.warn('Device.getInfo() failed, using fallback:', e)
+      }
     }
   }
 

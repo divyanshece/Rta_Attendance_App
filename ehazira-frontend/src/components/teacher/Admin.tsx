@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { adminAPI, AdminTeacher, AdminDepartment } from '@/services/api'
+import { adminAPI, AdminTeacher, AdminDepartment, AdminStudent } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,9 @@ import {
   X,
   Loader2,
   Search,
+  Pencil,
+  Smartphone,
+  CheckCircle,
 } from 'lucide-react'
 import { AppLogo } from '@/components/ui/AppLogo'
 import toast from 'react-hot-toast'
@@ -28,13 +31,18 @@ export default function AdminPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { confirm, ConfirmDialog } = useConfirm()
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'departments'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'departments' | 'students'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
+  const [studentSearchQuery, setStudentSearchQuery] = useState('')
+  const [studentSearchInput, setStudentSearchInput] = useState('')
 
   // Modal states
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showAddDeptModal, setShowAddDeptModal] = useState(false)
+  const [showEditStudentModal, setShowEditStudentModal] = useState(false)
+  const [editingStudent, setEditingStudent] = useState<AdminStudent | null>(null)
+  const [editStudentForm, setEditStudentForm] = useState({ name: '', roll_no: '' })
 
   // Form states
   const [teacherForm, setTeacherForm] = useState({
@@ -65,7 +73,38 @@ export default function AdminPage() {
     enabled: activeTab === 'departments' || activeTab === 'overview',
   })
 
+  const { data: studentsData, isLoading: isLoadingStudents } = useQuery({
+    queryKey: ['adminStudents', studentSearchQuery],
+    queryFn: () => adminAPI.getStudents(studentSearchQuery || undefined),
+    enabled: activeTab === 'students',
+  })
+
   // Mutations
+  const updateStudentMutation = useMutation({
+    mutationFn: ({ email, data }: { email: string; data: { name?: string; roll_no?: string } }) =>
+      adminAPI.updateStudent(email, data),
+    onSuccess: (data) => {
+      toast.success(data.message)
+      queryClient.invalidateQueries({ queryKey: ['adminStudents'] })
+      setShowEditStudentModal(false)
+      setEditingStudent(null)
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to update student')
+    },
+  })
+
+  const resetStudentDeviceMutation = useMutation({
+    mutationFn: adminAPI.resetStudentDevice,
+    onSuccess: (data) => {
+      toast.success(data.message)
+      queryClient.invalidateQueries({ queryKey: ['adminStudents'] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to reset device')
+    },
+  })
+
   const addTeacherMutation = useMutation({
     mutationFn: adminAPI.addTeacher,
     onSuccess: () => {
@@ -231,8 +270,18 @@ export default function AdminPage() {
               onClick={() => setActiveTab('departments')}
             >
               <BookOpen className="h-4 w-4" />
-              Departments
+              <span className="hidden sm:inline">Departments</span>
               <Badge variant="secondary" className="text-xs">{dashboard?.stats.departments || 0}</Badge>
+            </button>
+            <button
+              className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 ${
+                activeTab === 'students' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground'
+              }`}
+              onClick={() => setActiveTab('students')}
+            >
+              <GraduationCap className="h-4 w-4" />
+              Students
+              <Badge variant="secondary" className="text-xs">{dashboard?.stats.students || 0}</Badge>
             </button>
           </div>
         </div>
@@ -472,6 +521,125 @@ export default function AdminPage() {
             )}
           </div>
         )}
+
+        {/* Students Tab */}
+        {activeTab === 'students' && (
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <form
+                className="relative flex-1 max-w-md"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  setStudentSearchQuery(studentSearchInput)
+                }}
+              >
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or roll..."
+                  value={studentSearchInput}
+                  onChange={(e) => setStudentSearchInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setStudentSearchQuery(studentSearchInput) }}
+                  className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-background text-foreground"
+                />
+              </form>
+              <Button
+                variant="outline"
+                onClick={() => setStudentSearchQuery(studentSearchInput)}
+                className="rounded-xl"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Search
+              </Button>
+            </div>
+
+            {/* Students List */}
+            {isLoadingStudents ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+              </div>
+            ) : !studentsData?.students?.length ? (
+              <div className="text-center py-12 bg-card rounded-2xl border">
+                <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="font-medium text-foreground mb-2">
+                  {studentSearchQuery ? 'No students found' : 'Search for students'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {studentSearchQuery ? 'Try a different search term' : 'Enter a name, email, or roll number to search'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                <p className="text-sm text-muted-foreground">{studentsData.count} student{studentsData.count !== 1 ? 's' : ''} found</p>
+                {studentsData.students.map((student: AdminStudent) => (
+                  <div
+                    key={student.email}
+                    className="flex items-center justify-between p-3 sm:p-4 bg-card rounded-xl border hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
+                      <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
+                        {student.name.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <p className="font-semibold text-foreground text-sm sm:text-base truncate max-w-[150px] sm:max-w-none">{student.name}</p>
+                          {student.verified && (
+                            <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] sm:text-xs px-1.5 py-0.5">
+                              <CheckCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Verified</span>
+                            </Badge>
+                          )}
+                          {student.has_active_device && (
+                            <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[10px] sm:text-xs px-1.5 py-0.5">
+                              <Smartphone className="h-2.5 w-2.5 sm:h-3 sm:w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Device</span>
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm text-muted-foreground truncate">{student.email}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">
+                          Roll: {student.roll_no} {student.class_name ? `• ${student.class_name}` : ''} {student.department ? `• ${student.department}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {/* Edit Student */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingStudent(student)
+                          setEditStudentForm({ name: student.name, roll_no: student.roll_no })
+                          setShowEditStudentModal(true)
+                        }}
+                        className="rounded-xl text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
+                        title="Edit student"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      {/* Reset Device */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={async () => {
+                          if (await confirm('Reset Device', `Reset device for ${student.name}? This will allow them to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
+                            resetStudentDeviceMutation.mutate(student.email)
+                          }
+                        }}
+                        disabled={resetStudentDeviceMutation.isPending}
+                        className="rounded-xl text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0"
+                        title="Reset student's device"
+                      >
+                        <Smartphone className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Add Teacher Modal */}
@@ -649,6 +817,69 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      {/* Edit Student Modal */}
+      {showEditStudentModal && editingStudent && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+              <h3 className="font-heading font-bold text-lg text-foreground">Edit Student</h3>
+              <Button variant="ghost" size="icon" onClick={() => { setShowEditStudentModal(false); setEditingStudent(null) }} className="rounded-xl">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+                <input
+                  type="email"
+                  value={editingStudent.email}
+                  disabled
+                  className="w-full px-4 py-3 border rounded-xl bg-muted text-muted-foreground cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editStudentForm.name}
+                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Student name"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Roll Number</label>
+                <input
+                  type="text"
+                  value={editStudentForm.roll_no}
+                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
+                  placeholder="Roll number"
+                  className="w-full px-4 py-3 border rounded-xl bg-background text-foreground"
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  if (editingStudent) {
+                    updateStudentMutation.mutate({
+                      email: editingStudent.email,
+                      data: editStudentForm,
+                    })
+                  }
+                }}
+                disabled={!editStudentForm.name || !editStudentForm.roll_no || updateStudentMutation.isPending}
+                className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11"
+              >
+                {updateStudentMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                ) : (
+                  <><Pencil className="h-4 w-4 mr-2" />Save Changes</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {ConfirmDialog}
     </div>
   )

@@ -551,6 +551,11 @@ export const classAPI = {
     return response.data
   },
 
+  updateStudent: async (classId: number, email: string, data: { name?: string; roll_no?: string }): Promise<{ message: string; email: string; name: string; roll_no: string }> => {
+    const response = await api.put(`/classes/${classId}/students/${encodeURIComponent(email)}/update/`, data)
+    return response.data
+  },
+
   markComplete: async (classId: number): Promise<{ message: string; class_id: number; completed_at: string }> => {
     const response = await api.post(`/classes/${classId}/complete/`)
     return response.data
@@ -1128,6 +1133,17 @@ export interface AdminDepartment {
   class_count: number
 }
 
+export interface AdminStudent {
+  email: string
+  name: string
+  roll_no: string
+  verified: boolean
+  class_id: number | null
+  class_name: string | null
+  department: string | null
+  has_active_device: boolean
+}
+
 export const adminAPI = {
   // Check if current user is an admin
   checkAdmin: async (): Promise<AdminCheckResponse> => {
@@ -1196,6 +1212,24 @@ export const adminAPI = {
   // Toggle admin status for a teacher
   toggleAdmin: async (teacherEmail: string): Promise<{ message: string; is_admin: boolean }> => {
     const response = await api.post('/api/admin/toggle/', { teacher_email: teacherEmail })
+    return response.data
+  },
+
+  // Get students in organization (with search)
+  getStudents: async (search?: string): Promise<{ students: AdminStudent[]; count: number }> => {
+    const response = await api.get('/api/admin/students/', { params: search ? { search } : {} })
+    return response.data
+  },
+
+  // Update student details
+  updateStudent: async (email: string, data: { name?: string; roll_no?: string }): Promise<{ message: string; email: string; name: string; roll_no: string }> => {
+    const response = await api.put(`/api/admin/students/${encodeURIComponent(email)}/`, data)
+    return response.data
+  },
+
+  // Reset student device (admin)
+  resetStudentDevice: async (email: string): Promise<{ message: string; devices_removed: number }> => {
+    const response = await api.post(`/api/admin/students/${encodeURIComponent(email)}/reset-device/`)
     return response.data
   },
 }
