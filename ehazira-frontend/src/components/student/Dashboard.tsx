@@ -1,5 +1,6 @@
+import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/auth'
 import { studentAPI } from '@/services/api'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import {
   CheckCircle,
   XCircle,
   Megaphone,
+  RefreshCw,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AppLogo } from '@/components/ui/AppLogo'
@@ -66,7 +68,49 @@ interface TodayScheduleItem {
 
 export default function StudentDashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuthStore()
+
+  // Pull-to-refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const touchStartY = useRef(0)
+  const isPulling = useRef(false)
+
+  const PULL_THRESHOLD = 80
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (window.scrollY === 0) {
+      touchStartY.current = e.touches[0].clientY
+      isPulling.current = true
+    }
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isPulling.current || isRefreshing) return
+    const dy = e.touches[0].clientY - touchStartY.current
+    if (dy > 0 && window.scrollY === 0) {
+      setPullDistance(Math.min(dy * 0.5, 120))
+    } else {
+      isPulling.current = false
+      setPullDistance(0)
+    }
+  }, [isRefreshing])
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!isPulling.current) return
+    isPulling.current = false
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true)
+      setPullDistance(PULL_THRESHOLD)
+      await queryClient.invalidateQueries({ queryKey: ['studentClasses'] })
+      await queryClient.invalidateQueries({ queryKey: ['studentDashboardStats'] })
+      await queryClient.invalidateQueries({ queryKey: ['studentTodaySchedule'] })
+      await queryClient.invalidateQueries({ queryKey: ['studentAnnouncements'] })
+      setIsRefreshing(false)
+    }
+    setPullDistance(0)
+  }, [pullDistance, isRefreshing, queryClient])
 
   const { data: classesData = [], isLoading: isLoadingClasses } = useQuery({
     queryKey: ['studentClasses'],
@@ -103,7 +147,24 @@ export default function StudentDashboard() {
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          className="flex items-center justify-center overflow-hidden transition-[height] duration-200"
+          style={{ height: isRefreshing ? PULL_THRESHOLD : pullDistance }}
+        >
+          <RefreshCw className={`h-5 w-5 text-amber-500 transition-transform ${
+            isRefreshing ? 'animate-spin' : pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
+          }`} />
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-50 glass border-b">
         <div className="max-w-7xl mx-auto px-4">
