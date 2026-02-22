@@ -224,10 +224,9 @@ export default function TeacherAttendance() {
       const timer = setTimeout(() => setOtpTimer(otpTimer - 1), 1000)
       return () => clearTimeout(timer)
     } else if (currentSessionId && step === 'active' && otpTimer === 0 && !otpExpired) {
-      // OTP just expired - mark all pending students as absent
+      // Timer expired — just show regenerate hint, do NOT auto-mark absent
       setOtpExpired(true)
-      markPendingAsAbsent()
-      toast.error('OTP expired! Pending students marked as absent.')
+      toast('OTP timer expired. Regenerate or close session.', { icon: 'ℹ️' })
     }
   }, [currentSessionId, step, otpTimer, otpExpired])
 
