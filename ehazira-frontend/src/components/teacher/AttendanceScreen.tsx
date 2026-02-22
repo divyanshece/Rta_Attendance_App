@@ -81,61 +81,38 @@ export default function TeacherAttendance() {
     setStep('select')
   }, [reset])
 
-  // Auto-close session when teacher leaves (browser close, tab close, or navigation)
+  // Auto-close session on component unmount (navigation away, back button, etc.)
   useEffect(() => {
-    const getApiUrl = () => {
+    const closeSession = () => {
+      if (!currentSessionId || step !== 'active') return
+      const token = localStorage.getItem('accessToken')
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      // Use fetch with keepalive - survives page navigation and supports auth headers
       try {
-        return (import.meta as unknown as { env: { VITE_API_URL?: string } }).env?.VITE_API_URL || 'http://localhost:8000'
+        fetch(`${apiUrl}/api/attendance/close`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ session_id: currentSessionId }),
+          keepalive: true,
+        }).catch(() => {})
       } catch {
-        return 'http://localhost:8000'
+        // Ignore - best effort cleanup
       }
     }
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (currentSessionId && step === 'active') {
-        // Try to close session before leaving
-        navigator.sendBeacon(
-          `${getApiUrl()}/api/attendance/close`,
-          JSON.stringify({ session_id: currentSessionId })
-        )
-        e.preventDefault()
-        e.returnValue = 'You have an active session. It will be auto-saved.'
-        return e.returnValue
-      }
-    }
-
-    // Auto-close on visibility change (tab hidden/closed)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && currentSessionId && step === 'active') {
-        // Send beacon to close session
-        const token = localStorage.getItem('accessToken')
-        if (token) {
-          navigator.sendBeacon(
-            `${getApiUrl()}/api/attendance/close`,
-            JSON.stringify({ session_id: currentSessionId })
-          )
-        }
-      }
+    const handleBeforeUnload = () => {
+      closeSession()
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [currentSessionId, step])
-
-  // Auto-close session on component unmount (navigation away)
-  useEffect(() => {
-    return () => {
-      if (currentSessionId && step === 'active') {
-        // Call close API on unmount
-        attendanceAPI.close(currentSessionId).catch(() => {
-          // Ignore errors on cleanup
-        })
-      }
+      // Component unmount (teacher navigated away) - close the session
+      closeSession()
     }
   }, [currentSessionId, step])
 

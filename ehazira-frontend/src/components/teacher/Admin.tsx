@@ -64,13 +64,13 @@ export default function AdminPage() {
   const { data: teachersData, isLoading: isLoadingTeachers } = useQuery({
     queryKey: ['adminTeachers'],
     queryFn: adminAPI.getTeachers,
-    enabled: activeTab === 'teachers' || activeTab === 'overview',
+    enabled: activeTab === 'teachers',
   })
 
   const { data: departmentsData, isLoading: isLoadingDepts } = useQuery({
     queryKey: ['adminDepartments'],
     queryFn: adminAPI.getDepartments,
-    enabled: activeTab === 'departments' || activeTab === 'overview',
+    enabled: activeTab === 'departments',
   })
 
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery({
