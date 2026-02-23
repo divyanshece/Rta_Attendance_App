@@ -304,6 +304,12 @@ export const authAPI = {
     const response = await api.get(`/devices/info/${email}/`)
     return response.data
   },
+
+  // Register FCM token for push notifications
+  registerFCMToken: async (fcmToken: string): Promise<{ message: string }> => {
+    const response = await api.post('/devices/fcm-token', { fcm_token: fcmToken })
+    return response.data
+  },
 }
 
 // Classes for attendance type

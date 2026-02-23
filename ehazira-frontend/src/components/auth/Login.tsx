@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { AppLogo } from '@/components/ui/AppLogo'
 import { getDeviceUUID, getDeviceFingerprint, getPlatform } from '@/utils/native'
+import { initPushNotifications } from '@/services/pushNotifications'
 
 // Lazy-load native Google Auth (only available on mobile)
 let GoogleAuth: any = null
@@ -65,6 +66,11 @@ export default function Login() {
     )
 
     toast.success(`Welcome ${response.user_info.name}!`)
+
+    // Register for push notifications (fire and forget)
+    if (response.user_type === 'student') {
+      initPushNotifications().catch(() => {})
+    }
 
     if (response.user_type === 'teacher') {
       navigate('/teacher')

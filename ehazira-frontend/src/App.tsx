@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from './store/auth'
+import { initPushNotifications } from './services/pushNotifications'
 import { ROUTES } from './utils/constants'
 import Login from './components/auth/Login'
 import TeacherDashboard from './components/teacher/Dashboard'
@@ -133,6 +134,8 @@ function App() {
         navigate(ROUTES.TEACHER_DASHBOARD, { replace: true })
       } else if (user.user_type === 'student') {
         navigate(ROUTES.STUDENT_DASHBOARD, { replace: true })
+        // Re-init push notifications on app resume (handles FCM token refresh)
+        initPushNotifications().catch(() => {})
       }
     }
   }, [])
