@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate, useBlocker } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { attendanceAPI } from '@/services/api'
 import { useAttendanceStore } from '@/store/attendance'
@@ -89,21 +89,7 @@ export default function TeacherAttendance() {
 
   // ─── Navigation Blocking ───────────────────────────────────────────
 
-  // 1. Block React Router navigation (Link clicks, programmatic navigate)
-  useBlocker(
-    useCallback(
-      ({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
-        if (isSessionActiveRef.current && currentLocation.pathname !== nextLocation.pathname) {
-          setShowExitWarning(true)
-          return true
-        }
-        return false
-      },
-      []
-    )
-  )
-
-  // 2. Block browser tab/window close with native dialog
+  // Block browser tab/window close with native dialog
   useEffect(() => {
     if (!isSessionActive) return
 
@@ -118,7 +104,7 @@ export default function TeacherAttendance() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isSessionActive])
 
-  // 3. Block browser back button / gestures via history manipulation
+  // Block browser back button / swipe gestures via history manipulation
   useEffect(() => {
     if (!isSessionActive) return
 
@@ -137,7 +123,7 @@ export default function TeacherAttendance() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [isSessionActive])
 
-  // 4. Block Capacitor hardware back button (Android)
+  // Block Capacitor hardware back button (Android)
   useEffect(() => {
     if (!isSessionActive) return
     let cleanup: (() => void) | undefined
@@ -162,7 +148,7 @@ export default function TeacherAttendance() {
     return () => cleanup?.()
   }, [isSessionActive])
 
-  // 5. Auto-close session on actual unmount (safety net — e.g. force-closed tab)
+  // Auto-close session on actual unmount (safety net — e.g. force-closed tab)
   useEffect(() => {
     return () => {
       if (!isSessionActiveRef.current) return
