@@ -1,9 +1,16 @@
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // Flag to prevent multiple logout redirects
 let isLoggingOut = false
+
+// Token refresh state
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}> = []
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -33,6 +40,18 @@ const forceLogout = (message?: string) => {
   window.location.replace('/login')
 }
 
+// Process queued requests after token refresh
+const processQueue = (error: unknown, token: string | null = null) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (token) {
+      resolve(token)
+    } else {
+      reject(error)
+    }
+  })
+  failedQueue = []
+}
+
 // Request interceptor - add auth token, skip if logging out
 api.interceptors.request.use((config) => {
   if (isLoggingOut) {
@@ -50,7 +69,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Response interceptor - handle auth errors
+// Response interceptor - handle auth errors with silent token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<{ error?: string; hint?: string; user_type?: string }>) => {
@@ -59,9 +78,81 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    if (error.response?.status === 401) {
-      forceLogout('Your session has expired. Please login again.')
-      return Promise.reject(error)
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Don't try to refresh if we're already logging out
+      if (isLoggingOut) {
+        return Promise.reject(error)
+      }
+
+      const refreshToken = localStorage.getItem('refresh_token')
+
+      // No refresh token available — force logout
+      if (!refreshToken) {
+        forceLogout('Your session has expired. Please login again.')
+        return Promise.reject(error)
+      }
+
+      // If already refreshing, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token: string) => {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              resolve(api(originalRequest))
+            },
+            reject: (err: unknown) => {
+              reject(err)
+            },
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        // Use raw axios to avoid interceptor loop
+        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+          refresh_token: refreshToken,
+        })
+
+        const { access_token, refresh_token: newRefreshToken } = response.data
+
+        // Update tokens in localStorage
+        localStorage.setItem('access_token', access_token)
+        localStorage.setItem('refresh_token', newRefreshToken)
+
+        // Update Zustand persisted state if it exists
+        const authStorage = localStorage.getItem('auth-storage')
+        if (authStorage) {
+          try {
+            const parsed = JSON.parse(authStorage)
+            if (parsed.state) {
+              parsed.state.accessToken = access_token
+              parsed.state.refreshToken = newRefreshToken
+              localStorage.setItem('auth-storage', JSON.stringify(parsed))
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        // Process queued requests with new token
+        processQueue(null, access_token)
+
+        // Retry the original request
+        originalRequest.headers.Authorization = `Bearer ${access_token}`
+        return api(originalRequest)
+      } catch (refreshError) {
+        // Refresh failed — force logout
+        processQueue(refreshError, null)
+        forceLogout('Your session has expired. Please login again.')
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
 
     // Handle device not approved error (usually means wrong token in localStorage)
@@ -77,6 +168,13 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
     }
+
+    // Handle device deactivated (from refresh endpoint)
+    if (error.response?.status === 403 && error.response?.data?.error?.includes('Device has been deactivated')) {
+      forceLogout('Your device has been deactivated. Please contact your teacher.')
+      return Promise.reject(error)
+    }
+
     return Promise.reject(error)
   }
 )
@@ -1154,6 +1252,40 @@ export interface AdminStudent {
   has_active_device: boolean
 }
 
+export interface AdminDepartmentClass {
+  class_id: number
+  batch: number
+  semester: number
+  section: string
+  is_active: boolean
+  student_count: number
+  subject_count: number
+  coordinator_name: string | null
+}
+
+export interface AdminClassSubject {
+  subject_id: number
+  course_name: string
+  teacher_email: string
+  teacher_name: string
+  student_count: number
+  session_count: number
+}
+
+export interface AdminSubjectDetail {
+  subject_id: number
+  course_name: string
+  class_id: number
+  class_name: string
+  teacher_email: string
+  teacher_name: string
+  teacher_designation: string
+  enrolled_student_count: number
+  total_sessions: number
+  average_attendance: number
+  last_session_date: string | null
+}
+
 export const adminAPI = {
   // Check if current user is an admin
   checkAdmin: async (): Promise<AdminCheckResponse> => {
@@ -1240,6 +1372,30 @@ export const adminAPI = {
   // Reset student device (admin)
   resetStudentDevice: async (email: string): Promise<{ message: string; devices_removed: number }> => {
     const response = await api.post(`/api/admin/students/${encodeURIComponent(email)}/reset-device/`)
+    return response.data
+  },
+
+  // Edit teacher details (admin)
+  editTeacher: async (data: { email: string; name?: string; designation?: string; department_id?: number }): Promise<{ message: string; email: string; name: string; designation: string; department_id: number; department_name: string }> => {
+    const response = await api.put('/api/admin/teachers/', data)
+    return response.data
+  },
+
+  // Department drill-down: classes in department
+  getDepartmentClasses: async (departmentId: number): Promise<{ department_id: number; department_name: string; classes: AdminDepartmentClass[]; count: number }> => {
+    const response = await api.get(`/api/admin/departments/${departmentId}/classes/`)
+    return response.data
+  },
+
+  // Department drill-down: subjects in class
+  getClassSubjects: async (departmentId: number, classId: number): Promise<{ class_id: number; class_name: string; department_name: string; subjects: AdminClassSubject[]; count: number }> => {
+    const response = await api.get(`/api/admin/departments/${departmentId}/classes/${classId}/subjects/`)
+    return response.data
+  },
+
+  // Department drill-down: subject detail
+  getSubjectDetail: async (departmentId: number, classId: number, subjectId: number): Promise<AdminSubjectDetail> => {
+    const response = await api.get(`/api/admin/departments/${departmentId}/classes/${classId}/subjects/${subjectId}/`)
     return response.data
   },
 }
