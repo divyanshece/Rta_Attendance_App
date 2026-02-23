@@ -130,6 +130,15 @@ function App() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
+      // Check for pending notification redirect (set by push notification tap)
+      const notificationRedirect = sessionStorage.getItem('notification_redirect')
+      if (notificationRedirect) {
+        sessionStorage.removeItem('notification_redirect')
+        navigate(notificationRedirect, { replace: true })
+        initPushNotifications().catch(() => {})
+        return
+      }
+
       if (user.user_type === 'teacher') {
         navigate(ROUTES.TEACHER_DASHBOARD, { replace: true })
       } else if (user.user_type === 'student') {

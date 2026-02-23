@@ -64,6 +64,7 @@ export async function initPushNotifications(): Promise<void> {
         try {
           const user = userType ? JSON.parse(userType) : null
           if (user?.user_type === 'student') {
+            sessionStorage.setItem('notification_redirect', '/student/announcements')
             window.location.href = '/student/announcements'
           }
         } catch {

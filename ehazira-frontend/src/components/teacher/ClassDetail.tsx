@@ -18,7 +18,6 @@ import {
   AlertCircle,
   BookOpen,
   Download,
-  BarChart3,
   Loader2,
   Minus,
   MoreVertical,
@@ -27,7 +26,9 @@ import {
   Calendar,
   FileDown,
   Smartphone,
-  Pencil,
+  ChevronDown,
+  ChevronUp,
+  Check,
 } from 'lucide-react'
 import { TeacherManagementModal } from './Classes'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -96,13 +97,12 @@ export default function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>()
   const queryClient = useQueryClient()
   const { confirm, ConfirmDialog } = useConfirm()
-  const [activeTab, setActiveTab] = useState<'students' | 'subjects' | 'stats'>('students')
+  const [activeTab, setActiveTab] = useState<'students' | 'subjects'>('students')
 
   // Modal states
   const [showAddStudentModal, setShowAddStudentModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showAddSubjectModal, setShowAddSubjectModal] = useState(false)
-  const [showEnrollmentModal, setShowEnrollmentModal] = useState<{ subjectId: number; subjectName: string } | null>(null)
   const [showAddPeriodModal, setShowAddPeriodModal] = useState<{ subjectId: number; subjectName: string } | null>(null)
   const [showTeacherModal, setShowTeacherModal] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -112,7 +112,6 @@ export default function ClassDetailPage() {
   const [subjectForm, setSubjectForm] = useState({ course_name: '' })
   const [periodForm, setPeriodForm] = useState<{ days: number[]; periods: number[] }>({ days: [], periods: [] })
   const [importFile, setImportFile] = useState<File | null>(null)
-  const [exportingSubjectId, setExportingSubjectId] = useState<number | null>(null)
   const [showExportModal, setShowExportModal] = useState<{ subjectId: number; subjectName: string } | null>(null)
   const [exportMonths, setExportMonths] = useState<{ month: number; year: number; month_name: string; total_sessions: number }[]>([])
   const [isLoadingExportMonths, setIsLoadingExportMonths] = useState(false)
@@ -121,6 +120,13 @@ export default function ClassDetailPage() {
   // Student lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [lookupResult, setLookupResult] = useState<{ exists: boolean; name?: string; roll_no?: string } | null>(null)
+
+  // Bulk selection state (Students tab)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set())
+
+  // Inline enrollment state (Subjects tab)
+  const [expandedSubjectId, setExpandedSubjectId] = useState<number | null>(null)
 
   const classIdNum = parseInt(classId || '0')
 
@@ -144,10 +150,12 @@ export default function ClassDetailPage() {
     enabled: !!classIdNum,
   })
 
-  const { data: stats, isLoading: isLoadingStats } = useQuery({
+  // Stats - fetched on subjects tab for inline display
+  const { data: stats } = useQuery({
     queryKey: ['classStats', classIdNum],
     queryFn: () => classAPI.getStats(classIdNum),
-    enabled: activeTab === 'stats' && !!classIdNum,
+    enabled: activeTab === 'subjects' && !!classIdNum,
+    staleTime: 60000,
   })
 
   // Get class info from classes list
@@ -161,6 +169,13 @@ export default function ClassDetailPage() {
   const classSubjects = subjects
   // Schedule is already filtered by class_id from API
   const classSchedule = schedule
+
+  // Inline enrollment query
+  const { data: enrollmentData, isLoading: isLoadingEnrollment } = useQuery({
+    queryKey: ['subjectEnrollment', expandedSubjectId],
+    queryFn: () => subjectAPI.getStudents(expandedSubjectId!),
+    enabled: !!expandedSubjectId,
+  })
 
   // Mutations
   const addStudentMutation = useMutation({
@@ -188,6 +203,35 @@ export default function ClassDetailPage() {
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || 'Failed to remove student')
+    },
+  })
+
+  // Bulk removal mutation
+  const bulkRemoveStudentsMutation = useMutation({
+    mutationFn: async (emails: string[]) => {
+      const results: { email: string; success: boolean }[] = []
+      for (const email of emails) {
+        try {
+          await classAPI.removeStudent(classIdNum, email)
+          results.push({ email, success: true })
+        } catch {
+          results.push({ email, success: false })
+        }
+      }
+      return results
+    },
+    onSuccess: (results) => {
+      const successCount = results.filter(r => r.success).length
+      const failCount = results.filter(r => !r.success).length
+      if (successCount > 0) {
+        toast.success(`${successCount} student${successCount > 1 ? 's' : ''} removed${failCount > 0 ? ` (${failCount} failed)` : ''}`)
+      } else {
+        toast.error('Failed to remove students')
+      }
+      refetchStudents()
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
+      setSelectionMode(false)
+      setSelectedStudents(new Set())
     },
   })
 
@@ -251,7 +295,6 @@ export default function ClassDetailPage() {
 
   const addPeriodsMutation = useMutation({
     mutationFn: async (data: { subject: number; periods: { day_of_week: number; period_no: number }[] }) => {
-      // Add periods sequentially to handle potential conflicts gracefully
       const results = []
       for (const period of data.periods) {
         try {
@@ -292,9 +335,46 @@ export default function ClassDetailPage() {
     onSuccess: () => {
       toast.success('Period removed')
       queryClient.invalidateQueries({ queryKey: ['schedule'] })
+      queryClient.invalidateQueries({ queryKey: ['classSchedule'] })
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.error || 'Failed to remove period')
+    },
+  })
+
+  // Inline enrollment mutations
+  const inlineEnrollMutation = useMutation({
+    mutationFn: ({ subjectId, email }: { subjectId: number; email: string }) =>
+      subjectAPI.enrollStudent(subjectId, email),
+    onSuccess: () => {
+      toast.success('Student enrolled')
+      queryClient.invalidateQueries({ queryKey: ['subjectEnrollment', expandedSubjectId] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to enroll student')
+    },
+  })
+
+  const inlineRemoveFromSubjectMutation = useMutation({
+    mutationFn: ({ subjectId, email }: { subjectId: number; email: string }) =>
+      subjectAPI.removeStudent(subjectId, email),
+    onSuccess: () => {
+      toast.success('Student removed from subject')
+      queryClient.invalidateQueries({ queryKey: ['subjectEnrollment', expandedSubjectId] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to remove student')
+    },
+  })
+
+  const inlineEnrollAllMutation = useMutation({
+    mutationFn: (subjectId: number) => subjectAPI.enrollAll(subjectId),
+    onSuccess: (data) => {
+      toast.success(`${data.enrolled_count} students enrolled`)
+      queryClient.invalidateQueries({ queryKey: ['subjectEnrollment', expandedSubjectId] })
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || 'Failed to enroll all')
     },
   })
 
@@ -363,8 +443,6 @@ export default function ClassDetailPage() {
       const { Capacitor } = await import('@capacitor/core')
       if (Capacitor.isNativePlatform()) {
         const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
-
-        // Save directly to Documents folder (accessible in Files app)
         await Filesystem.writeFile({
           path: filename,
           data: content,
@@ -376,8 +454,6 @@ export default function ClassDetailPage() {
     } catch {
       // Fall through to web download
     }
-
-    // Web: standard blob download
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -402,42 +478,26 @@ export default function ClassDetailPage() {
     setIsExporting(true)
     try {
       const data = await exportRegisterAPI.getMonthly(showExportModal.subjectId, month, year)
-
-      // Build date column headers: "06 Jan (Mon)"
-      const dateHeaders = data.sessions.map(s => {
+      const dateHeaders = data.sessions.map((s: any) => {
         const d = new Date(s.date)
         const day = d.getDate().toString().padStart(2, '0')
         const mon = d.toLocaleString('en-US', { month: 'short' })
         const dayName = s.day.substring(0, 3)
         return `${day} ${mon} (${dayName})`
       })
-
       const headers = ['S.No', 'Roll No', 'Name', 'Email', ...dateHeaders, 'Total Present', 'Total Classes', 'Attendance %']
-
-      const rows = data.students.map((student, idx) => [
-        idx + 1,
-        escapeCSV(student.roll_no),
-        escapeCSV(student.name),
-        escapeCSV(student.email),
-        ...student.attendance,
-        student.total_present,
-        student.total_classes,
-        `${student.percentage}%`,
+      const rows = data.students.map((student: any, idx: number) => [
+        idx + 1, escapeCSV(student.roll_no), escapeCSV(student.name), escapeCSV(student.email),
+        ...student.attendance, student.total_present, student.total_classes, `${student.percentage}%`,
       ])
-
       const csvContent = [
-        `Subject: ${escapeCSV(data.subject_name)}`,
-        `Class: ${escapeCSV(data.class_name)}`,
-        `Department: ${escapeCSV(data.department)}`,
-        `Teacher: ${escapeCSV(data.teacher_name)}`,
+        `Subject: ${escapeCSV(data.subject_name)}`, `Class: ${escapeCSV(data.class_name)}`,
+        `Department: ${escapeCSV(data.department)}`, `Teacher: ${escapeCSV(data.teacher_name)}`,
         `Month: ${monthName} ${year}`,
         `Batch: ${data.batch}${data.section?.trim() ? ` | Semester: ${data.semester} | Section: ${data.section}` : ` | Semester: ${data.semester}`}`,
-        `Exported: ${new Date().toLocaleString()}`,
-        '',
-        headers.map(h => escapeCSV(h)).join(','),
-        ...rows.map(row => row.join(','))
+        `Exported: ${new Date().toLocaleString()}`, '',
+        headers.map(h => escapeCSV(h)).join(','), ...rows.map((row: any) => row.join(','))
       ].join('\n')
-
       const filename = `attendance_${data.subject_name.replace(/\s+/g, '_')}_${monthName}_${year}.csv`
       await downloadCSV(csvContent, filename)
       toast.success(`${monthName} ${year} attendance exported`)
@@ -453,8 +513,6 @@ export default function ClassDetailPage() {
     setIsExporting(true)
     try {
       const data = await exportRegisterAPI.getSemester(showExportModal.subjectId)
-
-      // Build month column headers: "Jan '26 (P/T)", "Jan '26 %"
       const monthHeaders: string[] = []
       for (const m of data.months) {
         const shortMonth = m.month_name.substring(0, 3)
@@ -462,40 +520,26 @@ export default function ClassDetailPage() {
         monthHeaders.push(`${shortMonth} '${shortYear} (P/T)`)
         monthHeaders.push(`${shortMonth} '${shortYear} %`)
       }
-
       const headers = ['S.No', 'Roll No', 'Name', 'Email', ...monthHeaders, 'Total Present', 'Total Classes', 'Overall %']
-
-      const rows = data.students.map((student, idx) => {
+      const rows = data.students.map((student: any, idx: number) => {
         const monthCols: (string | number)[] = []
         for (const ms of student.monthly_stats) {
           monthCols.push(`${ms.present}/${ms.total}`)
           monthCols.push(`${ms.percentage}%`)
         }
         return [
-          idx + 1,
-          escapeCSV(student.roll_no),
-          escapeCSV(student.name),
-          escapeCSV(student.email),
-          ...monthCols,
-          student.total_present,
-          student.total_classes,
-          `${student.percentage}%`,
+          idx + 1, escapeCSV(student.roll_no), escapeCSV(student.name), escapeCSV(student.email),
+          ...monthCols, student.total_present, student.total_classes, `${student.percentage}%`,
         ]
       })
-
       const csvContent = [
-        `Subject: ${escapeCSV(data.subject_name)}`,
-        `Class: ${escapeCSV(data.class_name)}`,
-        `Department: ${escapeCSV(data.department)}`,
-        `Teacher: ${escapeCSV(data.teacher_name)}`,
+        `Subject: ${escapeCSV(data.subject_name)}`, `Class: ${escapeCSV(data.class_name)}`,
+        `Department: ${escapeCSV(data.department)}`, `Teacher: ${escapeCSV(data.teacher_name)}`,
         `Semester Summary`,
         `Batch: ${data.batch}${data.section?.trim() ? ` | Semester: ${data.semester} | Section: ${data.section}` : ` | Semester: ${data.semester}`}`,
-        `Exported: ${new Date().toLocaleString()}`,
-        '',
-        headers.map(h => escapeCSV(h)).join(','),
-        ...rows.map(row => row.join(','))
+        `Exported: ${new Date().toLocaleString()}`, '',
+        headers.map(h => escapeCSV(h)).join(','), ...rows.map((row: any) => row.join(','))
       ].join('\n')
-
       const filename = `attendance_${data.subject_name.replace(/\s+/g, '_')}_semester_summary.csv`
       await downloadCSV(csvContent, filename)
       toast.success('Semester summary exported')
@@ -524,7 +568,7 @@ export default function ClassDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header - Mobile Optimized */}
+      {/* Header */}
       <header className="sticky top-0 z-50 glass border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
@@ -555,14 +599,8 @@ export default function ClassDetailPage() {
               </div>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              {/* Management menu */}
               <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowMenu(!showMenu)}
-                  className="rounded-xl h-8 w-8 sm:h-9 sm:w-9 p-0"
-                >
+                <Button variant="outline" size="sm" onClick={() => setShowMenu(!showMenu)} className="rounded-xl h-8 w-8 sm:h-9 sm:w-9 p-0">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
                 {showMenu && (
@@ -572,10 +610,7 @@ export default function ClassDetailPage() {
                       {classInfo?.is_coordinator && (
                         <button
                           className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                          onClick={() => {
-                            setShowMenu(false)
-                            setShowTeacherModal(true)
-                          }}
+                          onClick={() => { setShowMenu(false); setShowTeacherModal(true) }}
                         >
                           <UserPlus2 className="h-4 w-4 text-blue-500" />
                           Manage Teachers
@@ -620,7 +655,7 @@ export default function ClassDetailPage() {
         </div>
       </header>
 
-      {/* Tabs - Mobile Optimized */}
+      {/* Tabs - 2 tabs only */}
       <div className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
           <div className="flex">
@@ -640,19 +675,12 @@ export default function ClassDetailPage() {
               <span className="hidden sm:inline">Subjects</span>
               <Badge variant="secondary" className="text-[10px] sm:text-xs px-1.5 sm:px-2">{classSubjects.length}</Badge>
             </button>
-            <button
-              className={`flex-1 px-2 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-1 sm:gap-2 ${activeTab === 'stats' ? 'border-amber-500 text-amber-600' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-              onClick={() => setActiveTab('stats')}
-            >
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Stats</span>
-            </button>
           </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {/* Students Tab */}
+        {/* ============ STUDENTS TAB ============ */}
         {activeTab === 'students' && (
           <div className="space-y-4 sm:space-y-6">
             {/* Actions */}
@@ -660,17 +688,52 @@ export default function ClassDetailPage() {
               <h2 className="text-base sm:text-xl font-heading font-semibold text-foreground">Enrolled Students</h2>
               {classInfo?.is_coordinator && (
                 <div className="flex gap-1.5 sm:gap-2">
-                  <Button variant="outline" onClick={() => setShowImportModal(true)} className="rounded-xl h-9 px-2.5 sm:px-4">
-                    <Upload className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Import</span>
+                  <Button
+                    variant={selectionMode ? 'default' : 'outline'}
+                    onClick={() => { setSelectionMode(!selectionMode); setSelectedStudents(new Set()) }}
+                    className={`rounded-xl h-9 px-2.5 sm:px-4 ${selectionMode ? 'bg-violet-500 hover:bg-violet-600' : ''}`}
+                  >
+                    {selectionMode ? (
+                      <><X className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Cancel</span></>
+                    ) : (
+                      <><Check className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Select</span></>
+                    )}
                   </Button>
-                  <Button onClick={() => setShowAddStudentModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600 h-9 px-2.5 sm:px-4">
-                    <UserPlus className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add Student</span>
-                  </Button>
+                  {!selectionMode && (
+                    <>
+                      <Button variant="outline" onClick={() => setShowImportModal(true)} className="rounded-xl h-9 px-2.5 sm:px-4">
+                        <Upload className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Import</span>
+                      </Button>
+                      <Button onClick={() => setShowAddStudentModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600 h-9 px-2.5 sm:px-4">
+                        <UserPlus className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Add Student</span>
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Select All bar */}
+            {selectionMode && (studentsData?.students?.length ?? 0) > 0 && (
+              <div className="flex items-center justify-between bg-violet-50 dark:bg-violet-900/20 rounded-xl px-3 py-2 border border-violet-200 dark:border-violet-800">
+                <button
+                  className="text-xs sm:text-sm text-violet-600 dark:text-violet-400 font-medium"
+                  onClick={() => {
+                    const students = studentsData?.students ?? []
+                    if (selectedStudents.size === students.length) {
+                      setSelectedStudents(new Set())
+                    } else {
+                      setSelectedStudents(new Set(students.map((s: StudentEnrollment) => s.student_email)))
+                    }
+                  }}
+                >
+                  {selectedStudents.size === (studentsData?.students?.length ?? 0) ? 'Deselect All' : 'Select All'}
+                </button>
+                <span className="text-xs text-muted-foreground">{selectedStudents.size} selected</span>
+              </div>
+            )}
 
             {/* Students List */}
             {isLoadingStudents ? (
@@ -690,12 +753,32 @@ export default function ClassDetailPage() {
                     key={student.student_email}
                     className="bg-card rounded-xl border p-3 sm:p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 active:bg-slate-100 dark:active:bg-slate-800 transition-colors"
                     onClick={() => {
-                      setEditingStudent(student)
-                      setEditStudentForm({ name: student.student_name, roll_no: student.roll_no })
-                      setShowEditStudentModal(true)
+                      if (selectionMode) {
+                        setSelectedStudents(prev => {
+                          const next = new Set(prev)
+                          if (next.has(student.student_email)) next.delete(student.student_email)
+                          else next.add(student.student_email)
+                          return next
+                        })
+                      } else {
+                        setEditingStudent(student)
+                        setEditStudentForm({ name: student.student_name, roll_no: student.roll_no })
+                        setShowEditStudentModal(true)
+                      }
                     }}
                   >
                     <div className="flex items-center gap-3 sm:gap-4">
+                      {selectionMode && (
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                          selectedStudents.has(student.student_email)
+                            ? 'bg-violet-500 border-violet-500'
+                            : 'border-slate-300 dark:border-slate-600'
+                        }`}>
+                          {selectedStudents.has(student.student_email) && (
+                            <Check className="h-3 w-3 text-white" />
+                          )}
+                        </div>
+                      )}
                       <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
                         {student.student_name.charAt(0)}
                       </div>
@@ -709,22 +792,46 @@ export default function ClassDetailPage() {
                 ))}
               </div>
             )}
+
+            {/* Floating bulk action bar */}
+            {selectionMode && selectedStudents.size > 0 && (
+              <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t shadow-lg p-3 sm:p-4">
+                <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-foreground">
+                    {selectedStudents.size} student{selectedStudents.size > 1 ? 's' : ''} selected
+                  </p>
+                  <Button
+                    onClick={async () => {
+                      if (await confirm('Remove Students', `Remove ${selectedStudents.size} student(s) from this class? This cannot be undone.`, { confirmLabel: 'Remove All' })) {
+                        bulkRemoveStudentsMutation.mutate(Array.from(selectedStudents))
+                      }
+                    }}
+                    disabled={bulkRemoveStudentsMutation.isPending}
+                    className="rounded-xl bg-red-500 hover:bg-red-600 text-white h-9 px-4"
+                  >
+                    {bulkRemoveStudentsMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Removing...</>
+                    ) : (
+                      <><Trash2 className="h-4 w-4 mr-2" />Remove Selected</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Subjects Tab */}
+        {/* ============ SUBJECTS TAB ============ */}
         {activeTab === 'subjects' && (
           <div className="space-y-4 sm:space-y-6">
-            {/* Actions */}
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-base sm:text-xl font-heading font-semibold text-foreground">Subjects & Schedule</h2>
+              <h2 className="text-base sm:text-xl font-heading font-semibold text-foreground">Subjects</h2>
               <Button onClick={() => setShowAddSubjectModal(true)} className="rounded-xl bg-amber-500 hover:bg-amber-600 h-9 px-2.5 sm:px-4">
                 <Plus className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Add Subject</span>
               </Button>
             </div>
 
-            {/* Subjects List */}
             {classSubjects.length === 0 ? (
               <div className="text-center py-8 sm:py-12 bg-card rounded-2xl border">
                 <BookOpen className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-muted-foreground mb-3 sm:mb-4" />
@@ -741,36 +848,64 @@ export default function ClassDetailPage() {
                     periodsByDay[p.day_of_week].push(p)
                   })
 
+                  const subjectStats = stats?.subjects?.find((s: any) => s.subject_id === subject.subject_id)
+                  const isExpanded = expandedSubjectId === subject.subject_id
+
+                  // ---- MINIMAL CARD for other teachers' subjects ----
+                  if (!subject.can_manage) {
+                    return (
+                      <div key={subject.subject_id} className="bg-card rounded-2xl border p-4 sm:p-5">
+                        <h3 className="text-base sm:text-lg font-semibold text-foreground">{subject.course_name}</h3>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          by {subject.teacher_name} &middot; {subjectPeriods.length} periods/week
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  // ---- FULL CARD for your own subjects ----
                   return (
                     <div key={subject.subject_id} className="bg-card rounded-2xl border p-4 sm:p-6">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-semibold text-foreground truncate">{subject.course_name}</h3>
-                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                            <span className="truncate max-w-[120px] sm:max-w-none">by {subject.teacher_name}</span>
-                            <span className="text-muted-foreground/50">•</span>
-                            <span>{subjectPeriods.length} periods/week</span>
-                            {subject.is_subject_owner && (
-                              <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] px-1.5 py-0.5">
-                                You
-                              </Badge>
-                            )}
+                      {/* Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-semibold text-foreground truncate">{subject.course_name}</h3>
+                            <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] px-1.5 py-0.5">
+                              You
+                            </Badge>
                           </div>
+                          <p className="text-xs sm:text-sm text-muted-foreground">
+                            {subjectPeriods.length} periods/week
+                          </p>
                         </div>
-                        {subject.can_manage && (
-                          <Button
-                            variant="outline"
-                            onClick={() => setShowEnrollmentModal({ subjectId: subject.subject_id, subjectName: subject.course_name })}
-                            className="rounded-xl h-9 px-3 text-xs sm:text-sm w-full sm:w-auto"
-                          >
-                            <Users className="h-4 w-4 mr-1.5 sm:mr-2" />
-                            Manage Students
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenExportModal(subject.subject_id, subject.course_name)}
+                          className="rounded-xl h-8 px-3 text-xs w-full sm:w-auto"
+                        >
+                          <Download className="h-3.5 w-3.5 mr-1.5" />
+                          Export
+                        </Button>
                       </div>
 
-                      {/* Schedule Grid - Horizontal scroll on mobile */}
-                      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-4">
+                      {/* Inline stats row */}
+                      {subjectStats && (
+                        <div className="flex items-center gap-4 mb-3 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{subjectStats.total_sessions}</span> sessions
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Avg: <span className={`font-bold ${getAttendanceColor(subjectStats.average_attendance)}`}>
+                              {subjectStats.average_attendance}%
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Schedule Grid */}
+                      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 mb-3">
                         <div className="grid grid-cols-6 gap-1.5 sm:gap-2 min-w-[320px]">
                           {DAYS.map((day, dayIndex) => {
                             const dayPeriods = periodsByDay[dayIndex] || []
@@ -784,22 +919,20 @@ export default function ClassDetailPage() {
                                       className="group relative bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md sm:rounded-lg"
                                     >
                                       P{p.period_no}
-                                      {(p.can_manage || subject.can_manage) && (
-                                        <button
-                                          onClick={async () => {
-                                            if (await confirm('Delete Period', 'Delete this period?', { confirmLabel: 'Delete' })) {
-                                              deletePeriodMutation.mutate(p.period_id)
-                                            }
-                                          }}
-                                          className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 text-white rounded-full text-[8px] sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity flex items-center justify-center"
-                                        >
-                                          <X className="h-2 w-2" />
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={async () => {
+                                          if (await confirm('Delete Period', 'Delete this period?', { confirmLabel: 'Delete' })) {
+                                            deletePeriodMutation.mutate(p.period_id)
+                                          }
+                                        }}
+                                        className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 text-white rounded-full text-[8px] sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity flex items-center justify-center"
+                                      >
+                                        <X className="h-2 w-2" />
+                                      </button>
                                     </div>
                                   ))}
                                   {dayPeriods.length === 0 && (
-                                    <div className="text-[10px] sm:text-xs text-muted-foreground py-1.5 sm:py-2">—</div>
+                                    <div className="text-[10px] sm:text-xs text-muted-foreground py-1.5 sm:py-2">&mdash;</div>
                                   )}
                                 </div>
                               </div>
@@ -808,111 +941,130 @@ export default function ClassDetailPage() {
                         </div>
                       </div>
 
-                      {subject.can_manage && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowAddPeriodModal({ subjectId: subject.subject_id, subjectName: subject.course_name })}
-                          className="w-full rounded-xl border-dashed h-9 text-xs sm:text-sm"
-                        >
-                          <Plus className="h-4 w-4 mr-1.5 sm:mr-2" />
-                          Add Period
-                        </Button>
+                      {/* Add Period button */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAddPeriodModal({ subjectId: subject.subject_id, subjectName: subject.course_name })}
+                        className="w-full rounded-xl border-dashed h-9 text-xs sm:text-sm mb-3"
+                      >
+                        <Plus className="h-4 w-4 mr-1.5 sm:mr-2" />
+                        Add Period
+                      </Button>
+
+                      {/* Inline Enrollment Toggle */}
+                      <button
+                        onClick={() => setExpandedSubjectId(isExpanded ? null : subject.subject_id)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <span className="text-xs sm:text-sm font-medium text-foreground flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          Enrolled Students
+                        </span>
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </button>
+
+                      {/* Inline Enrollment Panel */}
+                      {isExpanded && (
+                        <div className="mt-3 space-y-3">
+                          {isLoadingEnrollment ? (
+                            <div className="flex justify-center py-6">
+                              <div className="w-6 h-6 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
+                            </div>
+                          ) : (
+                            <>
+                              {/* Enroll All button */}
+                              {(enrollmentData?.not_enrolled?.length || 0) > 0 && (
+                                <Button
+                                  onClick={() => inlineEnrollAllMutation.mutate(subject.subject_id)}
+                                  disabled={inlineEnrollAllMutation.isPending}
+                                  className="w-full rounded-xl bg-violet-500 hover:bg-violet-600 text-white h-9 text-xs sm:text-sm"
+                                >
+                                  {inlineEnrollAllMutation.isPending ? (
+                                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enrolling...</>
+                                  ) : (
+                                    <><UserPlus className="h-4 w-4 mr-2" />Enroll All ({enrollmentData?.not_enrolled?.length})</>
+                                  )}
+                                </Button>
+                              )}
+
+                              {/* Enrolled list */}
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                  Enrolled ({enrollmentData?.enrolled?.length || 0})
+                                </p>
+                                {(enrollmentData?.enrolled?.length || 0) === 0 ? (
+                                  <p className="text-xs text-muted-foreground text-center py-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    No students enrolled yet
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                    {enrollmentData?.enrolled?.map((student: SubjectStudent) => (
+                                      <div key={student.student_email} className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <div className="w-7 h-7 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300">{student.name.charAt(0)}</span>
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-xs text-foreground truncate">{student.name}</p>
+                                            <p className="text-[10px] text-muted-foreground">{student.roll_no}</p>
+                                          </div>
+                                        </div>
+                                        <Button
+                                          size="sm" variant="ghost"
+                                          onClick={() => inlineRemoveFromSubjectMutation.mutate({ subjectId: subject.subject_id, email: student.student_email })}
+                                          disabled={inlineRemoveFromSubjectMutation.isPending}
+                                          className="rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7 p-0 flex-shrink-0"
+                                        >
+                                          <Minus className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Not Enrolled list */}
+                              {(enrollmentData?.not_enrolled?.length || 0) > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                                    <AlertCircle className="h-3 w-3 text-amber-500" />
+                                    Not Enrolled ({enrollmentData?.not_enrolled?.length})
+                                  </p>
+                                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                    {enrollmentData?.not_enrolled?.map((student: SubjectStudent) => (
+                                      <div key={student.student_email} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-[10px] font-medium text-muted-foreground">{student.name.charAt(0)}</span>
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-xs text-foreground truncate">{student.name}</p>
+                                            <p className="text-[10px] text-muted-foreground">{student.roll_no}</p>
+                                          </div>
+                                        </div>
+                                        <Button
+                                          size="sm" variant="outline"
+                                          onClick={() => inlineEnrollMutation.mutate({ subjectId: subject.subject_id, email: student.student_email })}
+                                          disabled={inlineEnrollMutation.isPending}
+                                          className="rounded-lg text-[10px] h-7 px-2 flex-shrink-0"
+                                        >
+                                          <Plus className="h-3 w-3 mr-0.5" />
+                                          Enroll
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
                   )
                 })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Stats Tab */}
-        {activeTab === 'stats' && (
-          <div className="space-y-4 sm:space-y-6">
-            <h2 className="text-base sm:text-xl font-heading font-semibold text-foreground">Attendance Statistics</h2>
-
-            {isLoadingStats ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
-              </div>
-            ) : stats ? (
-              <>
-                {/* Overview Cards */}
-                <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                  <div className="bg-card rounded-xl sm:rounded-2xl border p-3 sm:p-6">
-                    <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1 sm:mb-2">Classes Taken</p>
-                    <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{stats.classes_taken}</p>
-                  </div>
-                  <div className="bg-card rounded-xl sm:rounded-2xl border p-3 sm:p-6">
-                    <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1 sm:mb-2">Total Sessions</p>
-                    <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{stats.total_sessions}</p>
-                  </div>
-                  <div className="bg-card rounded-xl sm:rounded-2xl border p-3 sm:p-6">
-                    <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1 sm:mb-2">Students</p>
-                    <p className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{stats.total_students}</p>
-                  </div>
-                  <div className="bg-card rounded-xl sm:rounded-2xl border p-3 sm:p-6">
-                    <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1 sm:mb-2">Avg Attendance</p>
-                    <p className={`text-2xl sm:text-3xl font-heading font-bold ${getAttendanceColor(stats.average_attendance)}`}>
-                      {stats.average_attendance}%
-                    </p>
-                  </div>
-                </div>
-
-                {/* Subject-wise Stats */}
-                {stats.subjects.length > 0 && (
-                  <div className="bg-card rounded-xl sm:rounded-2xl border p-3 sm:p-6">
-                    <h3 className="text-sm sm:text-lg font-semibold text-foreground mb-3 sm:mb-4 flex items-center gap-2">
-                      <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-                      Subject-wise Attendance
-                    </h3>
-                    <div className="space-y-2 sm:space-y-3">
-                      {stats.subjects.map((subject: { subject_id: number; course_name: string; teacher_name: string; total_sessions: number; average_attendance: number; is_subject_owner?: boolean; can_export?: boolean }) => (
-                        <div
-                          key={subject.subject_id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <p className="font-semibold text-foreground text-sm sm:text-base truncate">{subject.course_name}</p>
-                              {subject.is_subject_owner && (
-                                <Badge variant="secondary" className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] px-1.5 py-0.5">
-                                  You
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                              by {subject.teacher_name} • {subject.total_sessions} sessions
-                            </p>
-                          </div>
-                          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-                            <p className={`text-xl sm:text-2xl font-heading font-bold ${getAttendanceColor(subject.average_attendance)}`}>
-                              {subject.average_attendance}%
-                            </p>
-                            {subject.can_export && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenExportModal(subject.subject_id, subject.course_name)}
-                                className="rounded-xl h-8 px-2 sm:px-3"
-                              >
-                                <Download className="h-4 w-4 sm:mr-2" />
-                                <span className="hidden sm:inline">Export</span>
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-8 sm:py-12 bg-card rounded-xl sm:rounded-2xl border">
-                <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-muted-foreground mb-3 sm:mb-4" />
-                <h3 className="text-base sm:text-lg font-medium text-foreground mb-2">No data available</h3>
-                <p className="text-sm text-muted-foreground">Start taking attendance to see statistics</p>
               </div>
             )}
           </div>
@@ -934,8 +1086,7 @@ export default function ClassDetailPage() {
                 <label className="block text-sm font-medium text-foreground mb-2">Email</label>
                 <div className="relative">
                   <input
-                    type="email"
-                    value={studentForm.email}
+                    type="email" value={studentForm.email}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     placeholder="student@example.com"
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base"
@@ -954,34 +1105,20 @@ export default function ClassDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Name</label>
-                <input
-                  type="text"
-                  value={studentForm.name}
-                  onChange={(e) => setStudentForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="John Doe"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base"
-                />
+                <input type="text" value={studentForm.name} onChange={(e) => setStudentForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="John Doe" className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Roll Number</label>
-                <input
-                  type="text"
-                  value={studentForm.roll_no}
-                  onChange={(e) => setStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
-                  placeholder="22030101"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base"
-                />
+                <input type="text" value={studentForm.roll_no} onChange={(e) => setStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
+                  placeholder="22030101" className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base" />
               </div>
               <Button
                 onClick={() => addStudentMutation.mutate(studentForm)}
                 disabled={!studentForm.email || !studentForm.name || !studentForm.roll_no || addStudentMutation.isPending}
                 className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-10 sm:h-11"
               >
-                {addStudentMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</>
-                ) : (
-                  <><UserPlus className="h-4 w-4 mr-2" />Add Student</>
-                )}
+                {addStudentMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</> : <><UserPlus className="h-4 w-4 mr-2" />Add Student</>}
               </Button>
             </div>
           </div>
@@ -1001,20 +1138,10 @@ export default function ClassDetailPage() {
             <div className="p-4 sm:p-6 space-y-4">
               <div className="border-2 border-dashed rounded-xl p-6 sm:p-8 text-center">
                 <FileSpreadsheet className="h-8 w-8 sm:h-10 sm:w-10 mx-auto text-muted-foreground mb-3" />
-                <input
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="import-file"
-                />
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} className="hidden" id="import-file" />
                 <label htmlFor="import-file" className="cursor-pointer">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-2">
-                    {importFile ? importFile.name : 'Click to select CSV or Excel file'}
-                  </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    Columns: email, name, roll_no
-                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-2">{importFile ? importFile.name : 'Click to select CSV or Excel file'}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Columns: email, name, roll_no</p>
                 </label>
               </div>
               <Button
@@ -1022,11 +1149,7 @@ export default function ClassDetailPage() {
                 disabled={!importFile || importStudentsMutation.isPending}
                 className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-10 sm:h-11"
               >
-                {importStudentsMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</>
-                ) : (
-                  <><Upload className="h-4 w-4 mr-2" />Import Students</>
-                )}
+                {importStudentsMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</> : <><Upload className="h-4 w-4 mr-2" />Import Students</>}
               </Button>
             </div>
           </div>
@@ -1046,31 +1169,22 @@ export default function ClassDetailPage() {
             <div className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">Subject Name</label>
-                <input
-                  type="text"
-                  value={subjectForm.course_name}
-                  onChange={(e) => setSubjectForm({ course_name: e.target.value })}
-                  placeholder="e.g., Data Structures"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base"
-                />
+                <input type="text" value={subjectForm.course_name} onChange={(e) => setSubjectForm({ course_name: e.target.value })}
+                  placeholder="e.g., Data Structures" className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm sm:text-base" />
               </div>
               <Button
                 onClick={() => addSubjectMutation.mutate(subjectForm)}
                 disabled={!subjectForm.course_name || addSubjectMutation.isPending}
                 className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-10 sm:h-11"
               >
-                {addSubjectMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</>
-                ) : (
-                  <><Plus className="h-4 w-4 mr-2" />Add Subject</>
-                )}
+                {addSubjectMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Adding...</> : <><Plus className="h-4 w-4 mr-2" />Add Subject</>}
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Period Modal - Bulk Addition Support */}
+      {/* Add Period Modal */}
       {showAddPeriodModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -1084,20 +1198,12 @@ export default function ClassDetailPage() {
               </Button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
-              {/* Day Selection - Multi-select chips */}
+              {/* Day Selection */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-foreground">Select Days</label>
-                  <button
-                    onClick={() => {
-                      if (periodForm.days.length === 6) {
-                        setPeriodForm(prev => ({ ...prev, days: [] }))
-                      } else {
-                        setPeriodForm(prev => ({ ...prev, days: [0, 1, 2, 3, 4, 5] }))
-                      }
-                    }}
-                    className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-                  >
+                  <button onClick={() => setPeriodForm(prev => ({ ...prev, days: prev.days.length === 6 ? [] : [0, 1, 2, 3, 4, 5] }))}
+                    className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">
                     {periodForm.days.length === 6 ? 'Clear all' : 'Select all'}
                   </button>
                 </div>
@@ -1105,42 +1211,23 @@ export default function ClassDetailPage() {
                   {DAYS.map((day, i) => {
                     const isSelected = periodForm.days.includes(i)
                     return (
-                      <button
-                        key={day}
-                        onClick={() => {
-                          if (isSelected) {
-                            setPeriodForm(prev => ({ ...prev, days: prev.days.filter(d => d !== i) }))
-                          } else {
-                            setPeriodForm(prev => ({ ...prev, days: [...prev.days, i].sort() }))
-                          }
-                        }}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                          isSelected
-                            ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25'
-                            : 'bg-slate-100 dark:bg-slate-800 text-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                      >
+                      <button key={day} onClick={() => {
+                        if (isSelected) setPeriodForm(prev => ({ ...prev, days: prev.days.filter(d => d !== i) }))
+                        else setPeriodForm(prev => ({ ...prev, days: [...prev.days, i].sort() }))
+                      }}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${isSelected ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25' : 'bg-slate-100 dark:bg-slate-800 text-foreground hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
                         {day}
                       </button>
                     )
                   })}
                 </div>
               </div>
-
-              {/* Period Selection - Multi-select grid */}
+              {/* Period Selection */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-foreground">Select Periods</label>
-                  <button
-                    onClick={() => {
-                      if (periodForm.periods.length === 8) {
-                        setPeriodForm(prev => ({ ...prev, periods: [] }))
-                      } else {
-                        setPeriodForm(prev => ({ ...prev, periods: [1, 2, 3, 4, 5, 6, 7, 8] }))
-                      }
-                    }}
-                    className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-                  >
+                  <button onClick={() => setPeriodForm(prev => ({ ...prev, periods: prev.periods.length === 8 ? [] : [1, 2, 3, 4, 5, 6, 7, 8] }))}
+                    className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">
                     {periodForm.periods.length === 8 ? 'Clear all' : 'Select all'}
                   </button>
                 </div>
@@ -1148,29 +1235,18 @@ export default function ClassDetailPage() {
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => {
                     const isSelected = periodForm.periods.includes(num)
                     return (
-                      <button
-                        key={num}
-                        onClick={() => {
-                          if (isSelected) {
-                            setPeriodForm(prev => ({ ...prev, periods: prev.periods.filter(p => p !== num) }))
-                          } else {
-                            setPeriodForm(prev => ({ ...prev, periods: [...prev.periods, num].sort((a, b) => a - b) }))
-                          }
-                        }}
-                        className={`p-3 rounded-xl border text-center font-semibold text-sm transition-all ${
-                          isSelected
-                            ? 'bg-gradient-to-br from-violet-500 to-purple-600 border-violet-500 text-white shadow-lg shadow-violet-500/25'
-                            : 'bg-background border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-700'
-                        }`}
-                      >
+                      <button key={num} onClick={() => {
+                        if (isSelected) setPeriodForm(prev => ({ ...prev, periods: prev.periods.filter(p => p !== num) }))
+                        else setPeriodForm(prev => ({ ...prev, periods: [...prev.periods, num].sort((a, b) => a - b) }))
+                      }}
+                        className={`p-3 rounded-xl border text-center font-semibold text-sm transition-all ${isSelected ? 'bg-gradient-to-br from-violet-500 to-purple-600 border-violet-500 text-white shadow-lg shadow-violet-500/25' : 'bg-background border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-700'}`}>
                         P{num}
                       </button>
                     )
                   })}
                 </div>
               </div>
-
-              {/* Preview of selected combinations */}
+              {/* Preview */}
               {periodForm.days.length > 0 && periodForm.periods.length > 0 && (
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-dashed">
                   <p className="text-xs font-medium text-muted-foreground mb-2">
@@ -1179,44 +1255,23 @@ export default function ClassDetailPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {periodForm.days.slice(0, 3).flatMap(day =>
                       periodForm.periods.slice(0, 2).map(period => (
-                        <Badge
-                          key={`${day}-${period}`}
-                          variant="secondary"
-                          className="text-[10px] px-2 py-0.5"
-                        >
-                          {DAYS[day]} P{period}
-                        </Badge>
+                        <Badge key={`${day}-${period}`} variant="secondary" className="text-[10px] px-2 py-0.5">{DAYS[day]} P{period}</Badge>
                       ))
                     )}
                     {(periodForm.days.length * periodForm.periods.length) > 6 && (
-                      <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
-                        +{(periodForm.days.length * periodForm.periods.length) - 6} more
-                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] px-2 py-0.5">+{(periodForm.days.length * periodForm.periods.length) - 6} more</Badge>
                     )}
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Footer with action button */}
             <div className="p-4 sm:p-6 border-t bg-card">
               <Button
                 onClick={() => {
-                  if (periodForm.days.length === 0 || periodForm.periods.length === 0) {
-                    toast.error('Please select at least one day and one period')
-                    return
-                  }
+                  if (periodForm.days.length === 0 || periodForm.periods.length === 0) { toast.error('Please select at least one day and one period'); return }
                   setIsAddingPeriods(true)
-                  const periods = periodForm.days.flatMap(day =>
-                    periodForm.periods.map(period => ({
-                      day_of_week: day,
-                      period_no: period,
-                    }))
-                  )
-                  addPeriodsMutation.mutate({
-                    subject: showAddPeriodModal.subjectId,
-                    periods,
-                  })
+                  const periods = periodForm.days.flatMap(day => periodForm.periods.map(period => ({ day_of_week: day, period_no: period })))
+                  addPeriodsMutation.mutate({ subject: showAddPeriodModal.subjectId, periods })
                 }}
                 disabled={isAddingPeriods || periodForm.days.length === 0 || periodForm.periods.length === 0}
                 className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-11 text-sm font-semibold"
@@ -1232,21 +1287,9 @@ export default function ClassDetailPage() {
         </div>
       )}
 
-      {/* Subject Enrollment Modal */}
-      {showEnrollmentModal && (
-        <SubjectEnrollmentModal
-          subjectId={showEnrollmentModal.subjectId}
-          subjectName={showEnrollmentModal.subjectName}
-          onClose={() => setShowEnrollmentModal(null)}
-        />
-      )}
-
       {/* Teacher Management Modal */}
       {showTeacherModal && (
-        <TeacherManagementModal
-          classId={classIdNum}
-          onClose={() => setShowTeacherModal(false)}
-        />
+        <TeacherManagementModal classId={classIdNum} onClose={() => setShowTeacherModal(false)} />
       )}
 
       {/* Export Attendance Register Modal */}
@@ -1262,17 +1305,11 @@ export default function ClassDetailPage() {
                   <h3 className="font-heading font-bold text-xl text-foreground">Export Attendance Register</h3>
                   <p className="text-sm text-muted-foreground">{showExportModal.subjectName}</p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => { setShowExportModal(null); setExportMonths([]) }}
-                  className="rounded-xl"
-                >
+                <Button variant="ghost" size="icon" onClick={() => { setShowExportModal(null); setExportMonths([]) }} className="rounded-xl">
                   <X className="h-5 w-5" />
                 </Button>
               </div>
             </div>
-
             <div className="p-6">
               {isLoadingExportMonths ? (
                 <div className="flex items-center justify-center py-12">
@@ -1285,51 +1322,30 @@ export default function ClassDetailPage() {
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Select a month for date-wise attendance register (1/0 for each class)
-                  </p>
-
-                  {/* Month Chips */}
+                  <p className="text-sm text-muted-foreground mb-4">Select a month for date-wise attendance register (1/0 for each class)</p>
                   <div className="flex flex-wrap gap-2 mb-6">
                     {exportMonths.map((m) => {
                       const shortMonth = m.month_name.substring(0, 3)
                       const shortYear = String(m.year).substring(2)
                       return (
-                        <button
-                          key={`${m.year}-${m.month}`}
-                          onClick={() => handleExportMonthly(m.month, m.year, m.month_name)}
-                          disabled={isExporting}
-                          className="flex flex-col items-center px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                        <button key={`${m.year}-${m.month}`} onClick={() => handleExportMonthly(m.month, m.year, m.month_name)} disabled={isExporting}
+                          className="flex flex-col items-center px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           <span className="text-sm font-semibold text-foreground">{shortMonth} '{shortYear}</span>
                           <span className="text-[10px] text-muted-foreground">{m.total_sessions} classes</span>
                         </button>
                       )
                     })}
                   </div>
-
-                  {/* Divider */}
                   <div className="flex items-center gap-4 mb-6">
                     <div className="flex-1 h-px bg-border" />
                     <span className="text-xs text-muted-foreground uppercase tracking-wider">or</span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
-
-                  {/* Semester Summary Button */}
-                  <Button
-                    onClick={handleExportSemester}
-                    disabled={isExporting}
-                    className="w-full rounded-xl h-12 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 dark:text-white"
-                  >
-                    {isExporting ? (
-                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Exporting...</>
-                    ) : (
-                      <><FileSpreadsheet className="mr-2 h-5 w-5" />Full Semester Summary</>
-                    )}
+                  <Button onClick={handleExportSemester} disabled={isExporting}
+                    className="w-full rounded-xl h-12 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 dark:text-white">
+                    {isExporting ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Exporting...</> : <><FileSpreadsheet className="mr-2 h-5 w-5" />Full Semester Summary</>}
                   </Button>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Month-wise summary with present/total for each month
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">Month-wise summary with present/total for each month</p>
                 </>
               )}
             </div>
@@ -1350,69 +1366,38 @@ export default function ClassDetailPage() {
             <div className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Email</label>
-                <input
-                  type="email"
-                  value={editingStudent.student_email}
-                  disabled
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-muted text-muted-foreground cursor-not-allowed text-sm"
-                />
+                <input type="email" value={editingStudent.student_email} disabled
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-muted text-muted-foreground cursor-not-allowed text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Name</label>
-                <input
-                  type="text"
-                  value={editStudentForm.name}
-                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Student name"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm"
-                />
+                <input type="text" value={editStudentForm.name} onChange={(e) => setEditStudentForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Student name" className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1.5">Roll Number</label>
-                <input
-                  type="text"
-                  value={editStudentForm.roll_no}
-                  onChange={(e) => setEditStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
-                  placeholder="Roll number"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm"
-                />
+                <input type="text" value={editStudentForm.roll_no} onChange={(e) => setEditStudentForm(prev => ({ ...prev, roll_no: e.target.value }))}
+                  placeholder="Roll number" className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl bg-background text-foreground text-sm" />
               </div>
               <Button
-                onClick={() => {
-                  if (editingStudent) {
-                    updateStudentMutation.mutate({
-                      email: editingStudent.student_email,
-                      data: editStudentForm,
-                    })
-                  }
-                }}
+                onClick={() => { if (editingStudent) updateStudentMutation.mutate({ email: editingStudent.student_email, data: editStudentForm }) }}
                 disabled={!editStudentForm.name || !editStudentForm.roll_no || updateStudentMutation.isPending}
                 className="w-full rounded-xl bg-amber-500 hover:bg-amber-600 h-10 sm:h-11"
               >
-                {updateStudentMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
-                ) : (
-                  'Save Changes'
-                )}
+                {updateStudentMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : 'Save Changes'}
               </Button>
-
-              {/* Other actions */}
               <div className="border-t pt-3 space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full rounded-xl h-10 text-sm"
+                <Button variant="outline" className="w-full rounded-xl h-10 text-sm"
                   onClick={async () => {
                     if (await confirm('Reset Device', `Reset device for ${editingStudent.student_name}? They will be able to login from a new device.`, { confirmLabel: 'Reset', destructive: false })) {
                       resetDeviceMutation.mutate(editingStudent.student_email)
                     }
-                  }}
-                >
+                  }}>
                   <Smartphone className="h-4 w-4 mr-2" />
                   Reset Device
                 </Button>
                 {classInfo?.is_coordinator && (
-                  <Button
-                    variant="outline"
+                  <Button variant="outline"
                     className="w-full rounded-xl h-10 text-sm text-red-500 hover:text-red-600 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
                     onClick={async () => {
                       if (await confirm('Remove Student', `Remove ${editingStudent.student_name} from this class?`, { confirmLabel: 'Remove' })) {
@@ -1420,8 +1405,7 @@ export default function ClassDetailPage() {
                         setShowEditStudentModal(false)
                         setEditingStudent(null)
                       }
-                    }}
-                  >
+                    }}>
                     <Trash2 className="h-4 w-4 mr-2" />
                     Remove from Class
                   </Button>
@@ -1433,174 +1417,6 @@ export default function ClassDetailPage() {
       )}
 
       {ConfirmDialog}
-    </div>
-  )
-}
-
-// Subject Enrollment Modal Component
-function SubjectEnrollmentModal({ subjectId, subjectName, onClose }: { subjectId: number; subjectName: string; onClose: () => void }) {
-  const { data: enrollmentData, isLoading, refetch } = useQuery({
-    queryKey: ['subjectEnrollment', subjectId],
-    queryFn: () => subjectAPI.getStudents(subjectId),
-  })
-
-  const enrollMutation = useMutation({
-    mutationFn: (studentEmail: string) => subjectAPI.enrollStudent(subjectId, studentEmail),
-    onSuccess: () => {
-      toast.success('Student enrolled')
-      refetch()
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to enroll student')
-    },
-  })
-
-  const removeMutation = useMutation({
-    mutationFn: (studentEmail: string) => subjectAPI.removeStudent(subjectId, studentEmail),
-    onSuccess: () => {
-      toast.success('Student removed from subject')
-      refetch()
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to remove student')
-    },
-  })
-
-  const enrollAllMutation = useMutation({
-    mutationFn: () => subjectAPI.enrollAll(subjectId),
-    onSuccess: (data) => {
-      toast.success(`${data.enrolled_count} students enrolled`)
-      refetch()
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to enroll all students')
-    },
-  })
-
-  const enrolled = enrollmentData?.enrolled || []
-  const notEnrolled = enrollmentData?.not_enrolled || []
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-      <div className="w-full sm:max-w-lg bg-card rounded-t-2xl sm:rounded-2xl border shadow-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-card z-10">
-          <div className="min-w-0 flex-1">
-            <h3 className="font-heading font-bold text-base sm:text-lg text-foreground truncate">{subjectName}</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">Manage student enrollment</p>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {isLoading ? (
-          <div className="p-8 flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            {notEnrolled.length > 0 && (
-              <Button
-                onClick={() => enrollAllMutation.mutate()}
-                disabled={enrollAllMutation.isPending}
-                className="w-full mb-4 rounded-xl bg-violet-500 hover:bg-violet-600 text-white h-10 sm:h-11 text-sm"
-              >
-                {enrollAllMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enrolling...</>
-                ) : (
-                  <><UserPlus className="h-4 w-4 mr-2" />Enroll All ({notEnrolled.length})</>
-                )}
-              </Button>
-            )}
-
-            <div className="mb-4 sm:mb-6">
-              <h4 className="font-medium text-xs sm:text-sm text-foreground mb-2 sm:mb-3 flex items-center gap-2">
-                <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" />
-                Enrolled ({enrolled.length})
-              </h4>
-              {enrolled.length === 0 ? (
-                <p className="text-xs sm:text-sm text-muted-foreground text-center py-3 sm:py-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                  No students enrolled yet
-                </p>
-              ) : (
-                <div className="space-y-1.5 sm:space-y-2 max-h-36 sm:max-h-48 overflow-y-auto">
-                  {enrolled.map((student: SubjectStudent) => (
-                    <div
-                      key={student.student_email}
-                      className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] sm:text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                            {student.name.charAt(0)}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm text-foreground truncate">{student.name}</p>
-                          <p className="text-[10px] sm:text-xs text-muted-foreground">{student.roll_no}</p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeMutation.mutate(student.student_email)}
-                        disabled={removeMutation.isPending}
-                        className="rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-7 w-7 sm:h-8 sm:w-8 p-0 flex-shrink-0"
-                      >
-                        <Minus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <h4 className="font-medium text-xs sm:text-sm text-foreground mb-2 sm:mb-3 flex items-center gap-2">
-                <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500" />
-                Not Enrolled ({notEnrolled.length})
-              </h4>
-              {notEnrolled.length === 0 ? (
-                <p className="text-xs sm:text-sm text-muted-foreground text-center py-3 sm:py-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                  All class students are enrolled
-                </p>
-              ) : (
-                <div className="space-y-1.5 sm:space-y-2 max-h-36 sm:max-h-48 overflow-y-auto">
-                  {notEnrolled.map((student: SubjectStudent) => (
-                    <div
-                      key={student.student_email}
-                      className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">
-                            {student.name.charAt(0)}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-xs sm:text-sm text-foreground truncate">{student.name}</p>
-                          <p className="text-[10px] sm:text-xs text-muted-foreground">{student.roll_no}</p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => enrollMutation.mutate(student.student_email)}
-                        disabled={enrollMutation.isPending}
-                        className="rounded-lg text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 flex-shrink-0"
-                      >
-                        <Plus className="h-3 w-3 mr-0.5 sm:mr-1" />
-                        Enroll
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-      </div>
     </div>
   )
 }
