@@ -135,18 +135,6 @@ export default function TeacherDashboard() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Pull-to-refresh indicator */}
-      {(pullDistance > 0 || isRefreshing) && (
-        <div
-          className="flex items-center justify-center overflow-hidden transition-[height] duration-200"
-          style={{ height: isRefreshing ? PULL_THRESHOLD : pullDistance }}
-        >
-          <RefreshCw className={`h-5 w-5 text-amber-500 transition-transform ${
-            isRefreshing ? 'animate-spin' : pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
-          }`} />
-        </div>
-      )}
-
       {/* Header */}
       <header className="sticky top-0 z-50 glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -182,7 +170,7 @@ export default function TeacherDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <div className="mb-10 animate-in opacity-0">
+        <div className="mb-6 animate-in opacity-0">
           <p className="text-muted-foreground text-sm font-medium mb-1">{greeting}</p>
           <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-2">
             {user?.name?.split(' ')[0] || 'Teacher'}
@@ -196,6 +184,18 @@ export default function TeacherDashboard() {
             })}
           </p>
         </div>
+
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            className="flex items-center justify-center overflow-hidden transition-[height] duration-200 mb-2"
+            style={{ height: isRefreshing ? 40 : Math.min(pullDistance, 48) }}
+          >
+            <RefreshCw className={`h-4 w-4 text-amber-500 transition-transform ${
+              isRefreshing ? 'animate-spin' : pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
+            }`} />
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="mb-10">

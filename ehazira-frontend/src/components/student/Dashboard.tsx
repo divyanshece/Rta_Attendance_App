@@ -153,18 +153,6 @@ export default function StudentDashboard() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Pull-to-refresh indicator */}
-      {(pullDistance > 0 || isRefreshing) && (
-        <div
-          className="flex items-center justify-center overflow-hidden transition-[height] duration-200"
-          style={{ height: isRefreshing ? PULL_THRESHOLD : pullDistance }}
-        >
-          <RefreshCw className={`h-5 w-5 text-amber-500 transition-transform ${
-            isRefreshing ? 'animate-spin' : pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
-          }`} />
-        </div>
-      )}
-
       {/* Header */}
       <header className="sticky top-0 z-50 glass border-b">
         <div className="max-w-7xl mx-auto px-4">
@@ -189,11 +177,23 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-5">
-        {/* Welcome + Attendance */}
-        <div className="mb-5">
+        {/* Welcome */}
+        <div className="mb-4">
           <p className="text-xs text-muted-foreground">{greeting}</p>
           <h2 className="text-xl font-heading font-bold text-foreground">{user?.name?.split(' ')[0] || 'Student'}</h2>
         </div>
+
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            className="flex items-center justify-center overflow-hidden transition-[height] duration-200 mb-2"
+            style={{ height: isRefreshing ? 40 : Math.min(pullDistance, 48) }}
+          >
+            <RefreshCw className={`h-4 w-4 text-amber-500 transition-transform ${
+              isRefreshing ? 'animate-spin' : pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
+            }`} />
+          </div>
+        )}
 
         {/* Attendance + Mark Button */}
         <div className="grid grid-cols-2 gap-3 mb-5">

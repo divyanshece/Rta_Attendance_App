@@ -11,6 +11,10 @@ import {
   X,
   Pencil,
   Loader2,
+  Mail,
+  Briefcase,
+  Building2,
+  Hash,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -98,7 +102,7 @@ export default function TeacherSettings() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-amber-500/20 border-t-amber-500 animate-spin" />
       </div>
     )
   }
@@ -107,7 +111,7 @@ export default function TeacherSettings() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 glass border-b">
-        <div className="max-w-2xl mx-auto px-4">
+        <div className="max-w-lg mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/teacher')} className="rounded-xl h-9 w-9">
@@ -125,110 +129,128 @@ export default function TeacherSettings() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-5">
-        <div className="space-y-5">
-          {/* Profile Section */}
-          <div className="bg-card rounded-xl border p-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+      <main className="max-w-lg mx-auto px-4 py-5 space-y-4">
+        {/* Identity Card */}
+        <div className="bg-card rounded-xl border overflow-hidden">
+          <div className="px-4 pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
                 {formData.name?.charAt(0) || 'T'}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 {isEditing ? (
                   <input
                     type="text"
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="text-base font-semibold bg-background border rounded-lg px-3 py-1.5 w-full focus:outline-none focus:ring-2 focus:ring-amber-500 text-foreground"
+                    className="text-[15px] font-semibold bg-background border rounded-lg px-3 py-1.5 w-full focus:outline-none focus:ring-2 focus:ring-amber-500 text-foreground"
                     placeholder="Your name"
                   />
                 ) : (
-                  <p className="font-semibold text-foreground truncate">{formData.name}</p>
+                  <p className="font-semibold text-foreground text-[15px] leading-tight truncate">{formData.name}</p>
                 )}
-                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-              </div>
-            </div>
-
-            {/* Fields */}
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1 block">Designation</label>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={formData.designation}
-                    onChange={e => setFormData({ ...formData, designation: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    placeholder="e.g., Assistant Professor"
-                  />
-                ) : (
-                  <p className="text-sm text-foreground">{formData.designation || 'Not set'}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1 block">Department</label>
-                {isEditing ? (
-                  <select
-                    value={formData.department_id}
-                    onChange={(e) => {
-                      const deptId = Number(e.target.value)
-                      const dept = departments.find((d: Department) => d.department_id === deptId)
-                      setFormData({ ...formData, department_id: deptId, department_name: dept?.department_name || '' })
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value={0}>Select Department</option>
-                    {departments.map((dept: Department) => (
-                      <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm text-foreground">{formData.department_name || 'Not set'}</p>
-                )}
-              </div>
-
-              {profile?.organization && (
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium mb-1 block">Organization</label>
-                  <p className="text-sm text-foreground">{profile.organization.name}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                 </div>
-              )}
-            </div>
-
-            {/* Edit Actions */}
-            {isEditing && (
-              <div className="flex gap-2 mt-4 pt-4 border-t">
-                <Button
-                  onClick={handleSave}
-                  className="flex-1 rounded-xl h-10 bg-amber-500 hover:bg-amber-600"
-                  disabled={updateProfileMutation.isPending}
-                >
-                  {updateProfileMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <><Save className="h-4 w-4 mr-1.5" />Save</>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={handleCancel} className="flex-1 rounded-xl h-10" disabled={updateProfileMutation.isPending}>
-                  <X className="h-4 w-4 mr-1.5" />Cancel
-                </Button>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Logout */}
-          <Button
-            variant="outline"
-            className="w-full rounded-xl h-11 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
+          <div className="border-t" />
 
-          <p className="text-center text-xs text-muted-foreground">Rta v1.0.0</p>
+          {/* Designation */}
+          <div className="flex items-start gap-3 px-4 py-3">
+            <Briefcase className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Designation</p>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={formData.designation}
+                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
+                  className="w-full px-3 py-1.5 border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="e.g., Assistant Professor"
+                />
+              ) : (
+                <p className="text-sm font-medium text-foreground break-words leading-snug">{formData.designation || 'Not set'}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t" />
+
+          {/* Department */}
+          <div className="flex items-start gap-3 px-4 py-3">
+            <Building2 className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Department</p>
+              {isEditing ? (
+                <select
+                  value={formData.department_id}
+                  onChange={(e) => {
+                    const deptId = Number(e.target.value)
+                    const dept = departments.find((d: Department) => d.department_id === deptId)
+                    setFormData({ ...formData, department_id: deptId, department_name: dept?.department_name || '' })
+                  }}
+                  className="w-full px-3 py-1.5 border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value={0}>Select Department</option>
+                  {departments.map((dept: Department) => (
+                    <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm font-medium text-foreground break-words leading-snug">{formData.department_name || 'Not set'}</p>
+              )}
+            </div>
+          </div>
+
+          {profile?.organization && (
+            <>
+              <div className="border-t" />
+              <div className="flex items-start gap-3 px-4 py-3">
+                <Hash className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Organization</p>
+                  <p className="text-sm font-medium text-foreground break-words leading-snug">{profile.organization.name}</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Edit Actions */}
+          {isEditing && (
+            <div className="border-t px-4 py-3 flex gap-2">
+              <Button
+                onClick={handleSave}
+                className="flex-1 rounded-xl h-10 bg-amber-500 hover:bg-amber-600 text-white"
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <><Save className="h-4 w-4 mr-1.5" />Save</>
+                )}
+              </Button>
+              <Button variant="outline" onClick={handleCancel} className="flex-1 rounded-xl h-10" disabled={updateProfileMutation.isPending}>
+                <X className="h-4 w-4 mr-1.5" />Cancel
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* Logout */}
+        <Button
+          variant="outline"
+          className="w-full rounded-xl h-11 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Logout
+        </Button>
+
+        <p className="text-center text-[11px] text-muted-foreground pb-2">Rta v1.0.0</p>
       </main>
     </div>
   )
